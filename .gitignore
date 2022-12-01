@@ -1,0 +1,10 @@
+models/BLMM_gamma_mv_cross
+models/BLMM_gamma_qr_multivariate2
+models/BLMM_gamma_qr_multivariate3
+models/BLMM_gamma_separate
+inferring-personal-recommendations-for-renal-patients_cache/
+inferring-personal-recommendations-for-renal-patients_files/
+graphs/
+model_evaluation/
+patient_summary/
+.Rproj.user
