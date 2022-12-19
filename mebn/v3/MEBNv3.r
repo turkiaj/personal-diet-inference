@@ -3678,7 +3678,8 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      
                      repeat_only <- repeat_only
                      condition_in_repeat <- condition_in_repeat
-                     Q_index <- cond_index                     
+                     Q_index <- cond_index
+                     soft_limit_coef <- 0.1
                    })
   
   rstan_options (auto_write=TRUE)

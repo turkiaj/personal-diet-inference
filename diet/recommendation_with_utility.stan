@@ -79,6 +79,8 @@ data {
     real linear_transformation;
     int repeat_only;
     vector[r] Q_index;
+    
+    real soft_limit_coef;
 }
 
 transformed data {
@@ -100,13 +102,13 @@ parameters {
  
  // These limits should match with the priors for sampling to work
  
-  real<lower=Y_lower_trans[1], upper=Y_upper_trans[1]> pk; 
-  real<lower=Y_lower_trans[2], upper=Y_upper_trans[2]> fppi; 
-  real<lower=Y_lower_trans[3], upper=Y_upper_trans[3]> palb;
+  //real<lower=Y_lower_trans[1], upper=Y_upper_trans[1]> pk; 
+  //real<lower=Y_lower_trans[2], upper=Y_upper_trans[2]> fppi; 
+  //real<lower=Y_lower_trans[3], upper=Y_upper_trans[3]> palb;
 
-  //real pk; 
-  //real fppi; 
-  //real palb;
+  real pk; 
+  real fppi; 
+  real palb;
 
   vector[r] Q_trans;
 }
@@ -143,27 +145,66 @@ model {
       Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
   }
   
-  // TODO: nämä rajat pitäisi olla laajemmat, niin että 90% jakaumista on suositusten sisällä
+  // Quantile adjusted limits are pre-calculated at mebn.Query
 
-  pk ~ uniform(Y_lower_trans[1],Y_upper_trans[1]);
-  fppi ~ uniform(Y_lower_trans[2],Y_upper_trans[2]);
-  palb ~ uniform(Y_lower_trans[3],Y_upper_trans[3]);
+  //pk ~ uniform(Y_lower_trans[1],Y_upper_trans[1]);
+  //fppi ~ uniform(Y_lower_trans[2],Y_upper_trans[2]);
+  //palb ~ uniform(Y_lower_trans[3],Y_upper_trans[3]);
 
   //print("after priors:", target());
-
-  // likelihood of Q:s connection to concentration distributions 
-
-  target += gamma_lpdf(pk | alpha_point[1], alpha_point[1] / pk_mu);
-  target += gamma_lpdf(fppi | alpha_point[2], alpha_point[2] / fppi_mu);
-  target += gamma_lpdf(palb | alpha_point[3], alpha_point[3] / palb_mu);
-
-  //print("after gamma_lpdf:", target());
   
-  //print("after limits:", target());
-  
-  target += utility(Q, general_RI, r);
+  {
+    real concentration_lp = 0;
+    real exceeding = 0;
+    real scaledown = 1;
+    
+    real pk_beta = alpha_point[1] / pk_mu;
+    real fppi_beta = alpha_point[2] / fppi_mu;
+    real palb_beta = alpha_point[3] / palb_mu;
+    
+    pk ~ gamma(alpha_point[1], pk_beta);
+    fppi ~ gamma(alpha_point[2], fppi_beta);
+    palb ~ gamma(alpha_point[3], palb_beta);
 
-  //print("after utility:", target());
+    concentration_lp += gamma_lpdf(pk | alpha_point[1], pk_beta);
+    concentration_lp += gamma_lpdf(fppi | alpha_point[2], fppi_beta);
+    concentration_lp += gamma_lpdf(palb | alpha_point[3], palb_beta);
+
+    # accumulate the amount of that estimated concentrations are over their minimum or maximun limits
+    if (pk < Y_lower_trans[1]) {exceeding += Y_lower_trans[1] - pk;}
+    if (pk > Y_upper_trans[1]) {exceeding += pk - Y_upper_trans[1];}
+    if (fppi < Y_lower_trans[2]) {exceeding += Y_lower_trans[2] - fppi;}
+    if (fppi > Y_upper_trans[2]) {exceeding += fppi - Y_upper_trans[2];}
+    if (palb < Y_lower_trans[3]) {exceeding += Y_lower_trans[3] - palb;}
+    if (palb > Y_upper_trans[3]) {exceeding += palb - Y_upper_trans[3];}
+    
+    # scale down the log probability by the amount of (possible) limit exceeding
+    if (exceeding > 0)
+    {
+      scaledown = inv(exceeding);
+      
+      print("full concentration_lp: ", concentration_lp);
+
+      concentration_lp = concentration_lp * scaledown;
+
+      print("scaled concentration_lp: ", concentration_lp);
+      
+      target += concentration_lp;
+      
+      print("diet proposal produces invalid concentrations, scaledown: ", scaledown ,", target: ", target(), "");
+    }
+    else {
+      
+      target += concentration_lp;
+
+      print("diet proposal produces valid concentrations, target: ", target());
+      
+      // select the preferred diet from the valid concentrations
+      target += utility(Q, general_RI, r);
+  
+      print("target after utility: ", target());
+    }
+  }
   
 }
 
