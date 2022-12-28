@@ -1,6 +1,7 @@
 functions {
-  
-  real utility(vector Q, vector RI, vector Q_upperlimit, int r) {
+  real utility(vector Q, vector RI, int r) {
+
+    // TODO: decide per intake Q_i if we prefer lower or higher levels than RI
 
     // utility aims to minimize the sum of squares between personal recommendations (Q) and the generally recommended intake (RI)
     
@@ -11,14 +12,16 @@ functions {
     real invsum_of_residuals = inv(sum_of_residuals);
     real invmean_of_residuals = inv(mean_of_residuals);
     
-    return -log(sum_of_residuals+0.1);
-    
     // print("Qs: ", Q);
     // print("RIs: ", RI);
     // print("diffs: ", diffs);
     // print("sum_of_residuals: ", sum_of_residuals);
     // print("invsum_of_residuals: ", invsum_of_residuals);
     // print("loginvsum_of_residuals: ", log(invsum_of_residuals));
+    
+    return -invmean_of_residuals;
+    
+    // return (Q[2]);
   }
   
 }
@@ -27,8 +30,8 @@ data {
     int<lower=1> responses;    // number of responses
     int<lower=1> p;            // number of predictors
     int<lower=0> r;            // number of conditioned predictors
-    vector[r] proposal_lowerlimits; // limits of proposals   
-    vector[r] proposal_upperlimits; // limits of proposals   
+    real proposal_lowerlimits[r]; // limits of proposals   
+    real proposal_upperlimits[r]; // limits of proposals   
     vector[r] general_RI;        // intake statistics for calculating the utility
     vector[r] personal_CI;       // intake statistics for calculating the utility
     real Y_lower_limits[responses];        // lower limits of concentrations
@@ -50,6 +53,8 @@ data {
     real linear_transformation;
     int repeat_only;
     vector[r] Q_index;
+    
+    real soft_limit_coef;
 }
 
 transformed data {
@@ -69,18 +74,22 @@ transformed data {
 
 parameters {
  
-  vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
+ // These limits should match with the priors for sampling to work
+ 
+  real<lower=Y_lower_trans[1], upper=Y_upper_trans[1]> pk; 
+  real<lower=Y_lower_trans[2], upper=Y_upper_trans[2]> fppi; 
+  real<lower=Y_lower_trans[3], upper=Y_upper_trans[3]> palb;
+
+  //real pk; 
+  //real fppi; 
+  //real palb;
+
+  vector[r] Q;
 }
 
 transformed parameters {
 
-  // These limits should match with the priors for sampling to work
- 
-  //real<lower=Y_lower_trans[1], upper=Y_upper_trans[1]> pk_mu; 
-  //real<lower=Y_lower_trans[2], upper=Y_upper_trans[2]> fppi_mu;
-  //real<lower=Y_lower_trans[3], upper=Y_upper_trans[3]> palb_mu;
-
-  real pk_mu; 
+  real pk_mu;
   real fppi_mu;
   real palb_mu;
 
@@ -94,22 +103,77 @@ model {
   // priors
   
   for (i in 1:r) {
-       Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
+      Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
   }
+  
+  {
+    //real pk; 
+    //real fppi; 
+    //real palb;
 
-  target += cauchy_lpdf(pk_mu | Y_lower_trans[1], 1);
-  target += cauchy_lpdf(pk_mu | Y_upper_trans[1], 1);
+    // pk ~ uniform(Y_lower_trans[1],Y_upper_trans[1]);
+    // fppi ~ uniform(Y_lower_trans[2],Y_upper_trans[2]);
+    // palb ~ uniform(Y_lower_trans[3],Y_upper_trans[3]);
 
-  target += cauchy_lpdf(fppi_mu | Y_lower_trans[2], 1);
-  target += cauchy_lpdf(fppi_mu | Y_upper_trans[2], 1);
+    real pk_beta = alpha_point[1] / pk_mu;
+    real fppi_beta = alpha_point[2] / fppi_mu;
+    real palb_beta = alpha_point[3] / palb_mu;
 
-  target += cauchy_lpdf(palb_mu | Y_lower_trans[3], 1);
-  target += cauchy_lpdf(palb_mu | Y_upper_trans[3], 1);
+    //real concentration_lp = 0;
+    //real exceeding = 0;
+    //real scaledown = 1;
+    
+    //pk ~ gamma(alpha_point[1], pk_beta);
+    //fppi ~ gamma(alpha_point[2], fppi_beta);
+    //palb ~ gamma(alpha_point[3], palb_beta);
 
-  target += utility(Q, general_RI, proposal_upperlimits, r);
+    target += gamma_lupdf(pk | alpha_point[1], pk_beta);
+    target += gamma_lupdf(fppi | alpha_point[2], fppi_beta);
+    target += gamma_lupdf(palb | alpha_point[3], palb_beta);
 
-  //print("target: ", target());
+    //target += concentration_lp;
+    target += utility(Q, general_RI, r);
 
+    // accumulate the amount of that estimated concentrations are over their minimum or maximun limits
+    // if (pk < Y_lower_trans[1]) {exceeding += Y_lower_trans[1] - pk;}
+    // if (pk > Y_upper_trans[1]) {exceeding += pk - Y_upper_trans[1];}
+    // if (fppi < Y_lower_trans[2]) {exceeding += Y_lower_trans[2] - fppi;}
+    // if (fppi > Y_upper_trans[2]) {exceeding += fppi - Y_upper_trans[2];}
+    // if (palb < Y_lower_trans[3]) {exceeding += Y_lower_trans[3] - palb;}
+    // if (palb > Y_upper_trans[3]) {exceeding += palb - Y_upper_trans[3];}
+    // 
+    // print("exceeding: ", exceeding);
+    // 
+    // // scale down the log probability by the amount of (possible) limit exceeding
+    // if (exceeding > 0)
+    // {
+    //   // add scaled down lp increment instead
+    //   scaledown = inv(exceeding);
+    //   
+    //   //print("full concentration_lp: ", concentration_lp);
+    // 
+    //   concentration_lp = concentration_lp * scaledown;
+    // 
+    //   //print("scaled concentration_lp: ", concentration_lp);
+    //   
+    //   target += concentration_lp;
+    //   
+    //   //print("diet proposal produces invalid concentrations, scaledown: ", scaledown);
+    // }
+    // else {
+    //   
+    //   target += concentration_lp;
+    // 
+    //   //print("diet proposal produces valid concentrations");
+    //   
+    //   // select the preferred diet from the valid concentrations
+    //   target += utility(Q, general_RI, r);
+    // }
+    
+    //print("target: ", target());
+    
+  }
+  
 }
 
 generated quantities {
@@ -156,3 +220,4 @@ generated quantities {
   }
   
 }
+

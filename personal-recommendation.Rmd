@@ -369,6 +369,18 @@ qgamma(.9, shape=alpha_pk, rate=alpha_pk/4.7)
 ```
 
 
+```{r}
+library(rstan)
+
+scode <- "parameters { real y;} model { y ~ uniform(-100,100); target += y; print(target()); }"
+
+fit1 <- stan(model_code = scode, iter = 500, verbose = FALSE)
+
+#
+
+```
+
+
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
@@ -617,14 +629,48 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
 saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_posterior_params.rds"))
 
 
-  result <- rstan::extract(intake_model)
+#result <- rstan::extract(intake_model)
 
-  pk <- result$concentration[,,1]
+# pk <- result$concentration[,,1]
 
 #hist(result$fppi)
 #hist(pk)
 
 ```
+
+```{r}
+library(ggplot2)
+
+exceeding <- seq(6,0,by=-0.1)
+residuals <- seq(7,0.1,by=-0.1)
+
+lp <- c(100-exceeding, 100+1/residuals)
+
+proposal <- 1:length(lp)
+df <- data.frame(proposal=proposal, lp=lp)
+
+ggplot(df) +
+  geom_point(aes(x=proposal, y=lp))
+
+```
+
+
+
+
+```{r}
+library(ggplot2)
+
+result <- rstan::extract(intake_model)
+
+proposal <- 1:length(result$lp__)
+df <- data.frame(proposal=proposal, lp=result$lp__)
+
+ggplot(df) +
+  geom_point(aes(x=proposal, y=lp))
+
+```
+
+
 
 ```{r}
 #  for (node_index in 1:length(queried_nodes)) {
@@ -662,10 +708,21 @@ hist(concs.df$palb)
 
 ```{r}
 library(rstan)
+library(ggplot2)
 
 opfit <- stan(file="diet/mini_utility.stan", chains = 0)
 
 m <- stan_model(file="diet/mini_utility.stan")
+
+f <- sampling(m, cores=1, chain=1)
+f
+result <- rstan::extract(f)
+
+proposal <- 1:length(result$x)
+df <- data.frame(proposal=proposal, lp=result$lp__)
+
+ggplot(df) +
+  geom_point(aes(x=proposal, y=lp))
 
 rstan::optimizing(m, data = list(), 
     check_data = TRUE, sample_file = NULL, 
@@ -699,7 +756,7 @@ f <- optimizing(m, hessian = FALSE, verbose = TRUE)
 f
 ```
 
-```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.cap="Figure shows detailed intake recommendation for patient 10 from the previous recommendation table. The intake plot on the left shows the posterior samples of diet configurations that result concentrations of plasma potassium (P-K), fasting plasma phosphate (fP-Pi) and plasma albumin (P-Alb) to stay within their recommended limits. These levels are marked with vertical solid lines in the concentration panels. The black point in the middle of intake plot represents the patient's current potassium and phosphorous intake. Current concentrations matching this intake are shown with dashed vertical lines. Reported recommendation is shown with a rectangle that contains $95\\%$ of diet proposals that result recommended concentrations over $90\\%$ accuracy. Colouring of the rectangle sides match the concentration estimates in the right hand panels. The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
+```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=8, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
 library(ggplot2)
 library(gridExtra)
 library(ggrepel)
@@ -842,15 +899,32 @@ for (person_id in 36:36) {
 #       lay <- rbind(c(1,3),
 #                    c(2,4),
 #                    c(2,5))
-    
+       
     #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], layout_matrix = lay, padding=0)
     reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], intake_plots[[3]], intake_plots[[4]], intake_plots[[5]], layout_matrix = lay, padding=0)
     #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], intake_plots[[3]], pk_plot, fppi_plot, palb_plot, layout_matrix = lay, padding=0)
     #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], pk_plot, fppi_plot, palb_plot, layout_matrix = lay, padding=0)
-    ggsave(paste0("figures/reasoning_plots/reasoning_plots_",person_id,".pdf"), plot = reasoning_plot, width = 6, height = 6, scale = 1)
+    #ggsave(paste0("figures/reasoning_plots/reasoning_plots_",person_id,".pdf"), plot = reasoning_plot, width = 6, height = 6, scale = 1)
     
   } # file exists
 }
 ```
 
+```{r}
+      intake_plot <- ggplot(subset(accepted_intake.df, lowest_conc_prob >= 0.50), aes(x = kalium, y = fosfori)) +
+        geom_point(aes(colour=lowest_conc_prob), show.legend = TRUE) +
+        labs(x = "Potassium (mg/d)", y = "Phosphorous (mg/d)") +
+        scale_colour_gradient2(low = "#FFFFFF",
+                               high = "#0096FF",
+                               midpoint = 0.75,
+                               breaks = seq(0.5, 1, by = 0.05),
+                               limits = c(0.5, 1),
+                               labels = as.character(seq(50, 100, by = 5))) +
+        scale_x_continuous(limits=c(0,5800), breaks=c(0,1000,2000,3000,4000,5000,5800)) +
+        scale_y_continuous(limits=c(0,2550), breaks=c(0,500,1000,1500,2000,2550)) + 
+        theme(legend.position="bottom", axis.text = element_text(size=6), axis.title = element_text(size=8), plot.title = element_text(size=10)) + 
+        guides(colour = guide_colorbar(title = "Probability % of reaching target concentrations", title.theme = element_text(size=8), label.theme = element_text(size=6), title.position = "top", barwidth = unit(80,"mm"))) 
+    
+      intake_plot
+```
 

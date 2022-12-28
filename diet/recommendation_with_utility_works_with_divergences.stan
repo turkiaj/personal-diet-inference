@@ -94,18 +94,13 @@ model {
   // priors
   
   for (i in 1:r) {
-       Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
+      Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
   }
 
-  target += cauchy_lpdf(pk_mu | Y_lower_trans[1], 1);
-  target += cauchy_lpdf(pk_mu | Y_upper_trans[1], 1);
-
-  target += cauchy_lpdf(fppi_mu | Y_lower_trans[2], 1);
-  target += cauchy_lpdf(fppi_mu | Y_upper_trans[2], 1);
-
-  target += cauchy_lpdf(palb_mu | Y_lower_trans[3], 1);
-  target += cauchy_lpdf(palb_mu | Y_upper_trans[3], 1);
-
+  pk_mu ~ uniform(Y_lower_trans[1], Y_upper_trans[1]);
+  fppi_mu ~ uniform(Y_lower_trans[2], Y_upper_trans[2]);
+  palb_mu ~ uniform(Y_lower_trans[3], Y_upper_trans[3]);
+  
   target += utility(Q, general_RI, proposal_upperlimits, r);
 
   //print("target: ", target());
@@ -156,3 +151,4 @@ generated quantities {
   }
   
 }
+

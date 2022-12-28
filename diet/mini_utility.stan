@@ -1,23 +1,26 @@
 functions {
    
    real utility(real a, real b) {
-     return b-a;
+    
+     return b*1.5 + a*0.82;
    }
 }
 
-data{
+data {
 }
 
-parameters{
-  real<lower=-20> a;
-  real<upper=40> b;
-  real<lower=-1000, upper=1000> pk;
-  real pk_mu;
+parameters {
+  real<lower=0, upper=100> Q1;
+  real<lower=0, upper=200> Q2;
 }
 
-model{
-  
-  target += uniform_lpdf(pk_mu | a,b);
-  target += normal_lpdf(pk | pk_mu, 1);
-  target += utility(a,b);
+transformed parameters {
+  real pk_mu = Q1 * 1.23 + Q2 * 0.78;
+}
+
+model {
+
+  pk_mu ~ cauchy(3.4, 1);
+  pk_mu ~ cauchy(4.7, 1);
+
 }
