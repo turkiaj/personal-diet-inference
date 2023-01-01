@@ -368,20 +368,6 @@ qgamma(.9, shape=alpha_pk, rate=alpha_pk/4.7)
 
 ```
 
-
-```{r}
-library(rstan)
-
-scode <- "parameters { real y;} model { y ~ uniform(-100,100); target += y; print(target()); }"
-
-fit1 <- stan(model_code = scode, iter = 500, verbose = FALSE)
-
-#
-
-```
-
-
-
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
@@ -404,7 +390,9 @@ org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
 
 queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
 
-queried_nodes <- c("kalium", "fosfori", "protepros", "hhepros", "safaepros")
+# "protepros" "hhepros" "safaepros" "mufaepros" "pufaepros" "kuitu" "dvit" "natrium" "kalsium" "kalium" "suola" "fosfori"  "vesi"
+
+#queried_nodes <- c("kalium", "fosfori", "protepros", "hhepros", "safaepros")
 #queried_nodes <- c("kalium", "fosfori")
 
 # bounds and RI are normalized
@@ -478,14 +466,17 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
   
   # Get the original scale levels of potassium and potassium from each diet proposal
   intake_proposals.df <- data.frame(proposal=proposals)
-                                  
+
+  intake_proposals.df$lp <- result$lp__
+  intake_proposals.df$u <- result$preference
+  
   for (node_index in 1:length(queried_nodes)) {
     node_name <- queried_nodes[[node_index]]
     Q_proposal <- result$Q[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
     intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
   }
   
-  colnames(intake_proposals.df) <- c("proposal", queried_nodes)
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", queried_nodes)
   
   #  Calculate probability of each proposal being within the recommended concentration limits.
   #  The calculation is done based on empirical cumulative distribution function (ecdf) for each concentration distribution. 
@@ -509,20 +500,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
   acceptance_probability <- 0.50
   
   #   This is denoted with constant 'c' in Algorithm 1.
-  recommandation_probability_levels <- c(0.90, 0.80)
+  recommandation_probability_levels <- c(0.90)
   
   accepted <- 0
-
-  conc_limits <- concs.df %>%
-  select(pk,fppi,palb) %>%
-  summarise(
-            pk_low = min(pk), 
-            fppi_low = min(fppi), 
-            palb_low = min(palb),
-            pk_high = max(pk), 
-            fppi_high = max(fppi), 
-            palb_high = max(palb)
-  )
 
   # This requires all concentrations from one proposal to be accepted
   # distribution of accepted proposals    
@@ -542,10 +522,6 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
   # Search for the widest nutrient intake range within the accepted proposals  
 
   accepted <- 0
-  min_pot <- -1
-  min_pho <- -1 
-  max_pot <- -1
-  max_pho <- -1
 
   accepted_recommandation_probability <- 0
 
@@ -571,36 +547,24 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
         accepted_recommandation_probability <- recommandation_probability
   
         # Pick 2.5% and 97.5% quantiles of recommendation posteriors as recommendation limits   
-        pot_quantiles <- quantile(recommendation_intake.df$pot, probs = c(0.025,0.975))
-        pho_quantiles <- quantile(recommendation_intake.df$pho, probs = c(0.025,0.975))
+  
+        node_index <- 1
+        
+        for (node_index in 1:length(queried_nodes)) {
+          node_name <- queried_nodes[[node_index]]
+          
+          RI_mean <- mean(recommendation_intake.df[[node_name]])
+          RI_quantiles <- quantile(recommendation_intake.df[[node_name]], probs = c(0.025,0.975))
+
+        }
+
     
-        # And then closest sampled proposals matching those limits
-        min_pot_row <- recommendation_intake.df[which.min(abs(recommendation_intake.df$pot-pot_quantiles[1])),]
-        max_pot_row <- recommendation_intake.df[which.min(abs(recommendation_intake.df$pot-pot_quantiles[2])),]
-        min_pho_row <- recommendation_intake.df[which.min(abs(recommendation_intake.df$pho-pho_quantiles[1])),]
-        max_pho_row <- recommendation_intake.df[which.min(abs(recommendation_intake.df$pho-pho_quantiles[2])),]
-    
-        # - and nutrient levels
-        min_pot <- as.numeric(min_pot_row$pot)
-        max_pot <- as.numeric(max_pot_row$pot)
-        min_pho <- as.numeric(min_pho_row$pho)
-        max_pho <- as.numeric(max_pho_row$pho)
-        
-        # - concentrations matching those proposals    
-        concs_minmax.df <- concs.df[concs.df$proposal %in% c(min_pot_row$proposal,max_pot_row$proposal,min_pho_row$proposal,max_pho_row$proposal),]
-        
-        saveRDS(concs_minmax.df, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/concs_minmax_",person_id,".rds"))
-        
         # Break out from loop with this probability
         break
      } 
       else
      {
         accepted <- 0
-        min_pot <- -1
-        min_pho <- -1 
-        max_pot <- -1
-        max_pho <- -1
      }
     }
   #}
@@ -628,45 +592,65 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
 
 saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_posterior_params.rds"))
 
-
-#result <- rstan::extract(intake_model)
-
-# pk <- result$concentration[,,1]
-
-#hist(result$fppi)
-#hist(pk)
-
 ```
 
 ```{r}
 library(ggplot2)
-
-exceeding <- seq(6,0,by=-0.1)
-residuals <- seq(7,0.1,by=-0.1)
-
-lp <- c(100-exceeding, 100+1/residuals)
-
-proposal <- 1:length(lp)
-df <- data.frame(proposal=proposal, lp=lp)
-
-ggplot(df) +
-  geom_point(aes(x=proposal, y=lp))
-
-```
-
-
-
-
-```{r}
-library(ggplot2)
+library(gridExtra)
 
 result <- rstan::extract(intake_model)
 
 proposal <- 1:length(result$lp__)
-df <- data.frame(proposal=proposal, lp=result$lp__)
 
-ggplot(df) +
-  geom_point(aes(x=proposal, y=lp))
+df <- data.frame(proposal=proposal, lp=result$lp__, pk_mu=result$pk_mu-1000, fppi_mu=result$fppi_mu-1000, palb_mu=result$palb_mu-1000, utility=result$preference, Q1=result$Q[,1])
+
+conc_plot1 <- ggplot(df) +
+  geom_point(aes(y=lp, x=pk_mu, color=utility)) +
+  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", size=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot2 <- ggplot(df) +
+  geom_point(aes(y=lp, x=fppi_mu, color=utility)) +
+  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", size=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot3 <- ggplot(df) +
+  geom_point(aes(y=lp, x=palb_mu, color=utility)) +
+  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", size=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+lay <- rbind(c(1),
+             c(2),
+             c(3))
+
+lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
+
+q1_plot <- ggplot(df) +
+  #geom_point(aes(y=lp, x=Q1, color=utility)) +
+  geom_density(aes(x = Q1, fill = lp), colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+q1_plot
+
+
+ggplot(recommendation_intake.df) +
+  geom_point(aes(y=fosfori, x=kalium, color=preference)) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+personal_RI <- recommendation_intake.df %>% slice(which.max(preference))
+
+personal_RI
+
+accepted_intake.df$p
+max_lp$kalium
+
+rec_kalium <- mean(recommendation_intake.df$kalium)
+rec_fosfori <- mean(accepted_intake.df$fosfori)
+rec_safa <- mean(accepted_intake.df$safaepros)
+rec_hh <- mean(accepted_intake.df$hhepros)
+rec_prot <- mean(accepted_intake.df$protepros)
+
+rec_kalium
 
 ```
 
@@ -756,7 +740,7 @@ f <- optimizing(m, hessian = FALSE, verbose = TRUE)
 f
 ```
 
-```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=8, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
+```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=14, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
 library(ggplot2)
 library(gridExtra)
 library(ggrepel)
@@ -781,9 +765,7 @@ for (person_id in 36:36) {
   accepted_intake <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds")
   
   if (file.exists(accepted_intake)) {
-    # personal_recommendation <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/overviews/personal_recommendation_",person_id,".rds")
-    # patient_summary <- readRDS(personal_recommendation)
-    
+
     accepted_intake.df <- readRDS(accepted_intake)
     concs_minmax.df <- readRDS(paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/concs_minmax_",person_id,".rds"))
 
@@ -792,27 +774,13 @@ for (person_id in 36:36) {
 
     MyPalette <- c("#2860F6", "#FF7F0E", "#00BFC4", "#D62728", "#AAAAAA")
     
-    # accepted_intake.df$limiting_proposal <- sapply(accepted_intake.df$proposal, function(x) ifelse(x %in% concs_minmax.df$proposal,x,1000000))
-    # 
-    # lim_proposals <- accepted_intake.df %>% filter(limiting_proposal < 1000000)
-    # 
-    # min_pot <- lim_proposals[which.min(lim_proposals$pot),]$proposal
-    # max_pot <- lim_proposals[which.max(lim_proposals$pot),]$proposal
-    # min_pho <- lim_proposals[which.min(lim_proposals$pho),]$proposal
-    # max_pho <- lim_proposals[which.max(lim_proposals$pho),]$proposal
 
-    # Order density colors like this
-    
-    # proposal_order <- data.frame(proposal = c(min_pot, max_pot, min_pho, max_pho))
-    # proposal_order$color_order <- c(1,2,3,4)
-    
-    # concs_minmax.df <- concs_minmax.df %>% inner_join(proposal_order, by = "proposal")
-    
     # Plotting
-    cond_intake_names <- colnames(accepted_intake.df)[7:ncol(accepted_intake.df)]
+    cond_intake_names <- colnames(accepted_intake.df)[9:ncol(accepted_intake.df)]
     
     number_of_cond_intake <- length(cond_intake_names)
     intake_plots <- myplots <- vector('list', number_of_cond_intake)
+    
     for (i in 1:number_of_cond_intake)
     {
       intake_name <- cond_intake_names[i]
@@ -825,12 +793,15 @@ for (person_id in 36:36) {
       
       ScaleBreaks <- seq(from = ScaleMin, to = ScaleMax, by = (ScaleMax - ScaleMin) / 5)
       
-      RI <- as.numeric(variable_desc$Recommendation)
+      general_RI <- as.numeric(variable_desc$Recommendation)
       
-      intake_plot <- ggplot(subset(accepted_intake.df, lowest_conc_prob >= 0.50)) + 
+      personal_RI <- mean(recommendation_intake.df[[intake_symbol]])
+      
+      intake_plot <- ggplot(subset(recommendation_intake.df)) + 
         geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
-        labs(x = paste0(variable_desc$Description), y = "") +
-        geom_vline(xintercept = RI, linetype="dashed", color = "black", size=0.5) +
+        labs(x = paste0(variable_desc$Description), y = "", size = 0.7) +
+        geom_vline(xintercept = general_RI, linetype="dashed", color = "black", size=0.5) +
+        geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
         scale_x_continuous(limits=c(ScaleMin,ScaleMax), breaks=ScaleBreaks) +
         theme_bw() +
         theme(axis.text.y = element_blank())
@@ -838,76 +809,13 @@ for (person_id in 36:36) {
       intake_plots[[i]] <- intake_plot
     }
 
-    # pho_plot <- ggplot(subset(accepted_intake.df, lowest_conc_prob >= 0.50)) + 
-    #     geom_density(aes(x = pho), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = TRUE) +
-    #     labs(x = "Phosphorous (mg/d)", y = "") +
-    #     scale_x_continuous(limits=c(0,2550), breaks=c(0,500,1000,1500,2000,2550)) +  
-    #     theme_bw() +
-    #     theme(axis.text.y = element_blank())
-    # 
-    # prot_plot <- ggplot(subset(accepted_intake.df, lowest_conc_prob >= 0.50)) + 
-    #     geom_density(aes(x = prot), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = TRUE) +
-    #     labs(x = "Protein, E%", y = "") +
-    #     scale_x_continuous(limits=c(0,22.9), breaks=c(0,10,20,25)) +  
-    #     theme_bw() +
-    #     theme(axis.text.y = element_blank())
-        
-    # what kind of concentration these intakes result?
-    pk_plot <- ggplot(concs_minmax.df, aes(x = pk, group=factor(color_order))) +
-      #geom_density(aes(colour=factor(color_order)), show.legend = FALSE) +
-      labs(x = "P-K (mmol/l)", y = NULL, title=element_blank()) +
-      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", size=0.2) +
-      #geom_vline(xintercept = as.numeric(info$true_pk), linetype="dashed", color = "black", size=0.5) +
-      scale_x_continuous(breaks=c(pk_recommendations,3,4,5,6), limits=c(pk_recommendations,2,3,4,5,6,7)) +
-      scale_colour_manual(values = MyPalette) +
-      annotate("rect", xmin=-Inf, xmax=pk_recommendations[1], ymax=Inf, ymin=-Inf, alpha = .2) + 
-      annotate("rect", xmin=pk_recommendations[2], xmax=Inf, ymax=Inf, ymin=-Inf, alpha = .2) + 
-      theme_bw() +
-      theme(axis.text.x = element_text(size=6), axis.title = element_text(size=8), plot.title = element_text(size=9)) 
-    
-    fppi_plot <- ggplot(concs_minmax.df, aes(x = fppi, group=factor(color_order))) +
-      #geom_density(aes(color=factor(color_order)), show.legend = FALSE) +
-      labs(x = "fP-Pi (mmol/l)", y = NULL) +
-      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", size=0.2) +
-      #geom_vline(xintercept = as.numeric(info$true_fppi), linetype="dashed", color = "black", size=0.5) +
-      scale_x_continuous(breaks=c(fppi_recommendations,c(0,2,2.5)), limits = c(0.7,2.7)) +
-      scale_colour_manual(values = MyPalette) +
-      annotate("rect", xmin=-Inf, xmax=fppi_recommendations[1], ymax=Inf, ymin=-Inf, alpha = .2) + 
-      annotate("rect", xmin=fppi_recommendations[2], xmax=Inf, ymax=Inf, ymin=-Inf, alpha = .2) + 
-      theme_bw() +
-      theme(axis.text.x = element_text(size=6), axis.title = element_text(size=8), plot.title = element_text(size=9))
-    
-    palb_plot <- ggplot(concs_minmax.df, aes(x = palb, color=factor(color_order), group=factor(color_order))) +
-      #geom_density(aes(color=factor(color_order)), show.legend = FALSE) +
-      guides(guide = guide_legend(label.position = "bottom")) +
-      labs(x = "P-Alb (g/l)", y = NULL) +
-      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", size=0.2) +
-      #geom_vline(xintercept = as.numeric(info$true_palb), linetype="dashed", color = "black", size=0.5) +
-      scale_x_continuous(breaks=c(palb_recommendations,30,40), limits = c(30,47)) +
-      scale_colour_manual(values = MyPalette) +
-      annotate("rect", xmin=-Inf, xmax=palb_recommendations[1], ymax=Inf, ymin=-Inf, alpha = .2) + 
-      annotate("rect", xmin=palb_recommendations[2], xmax=Inf, ymax=Inf, ymin=-Inf, alpha = .2) + 
-      theme_bw() +
-      theme(legend.position="bottom", legend.title = element_blank(), axis.text.x = element_text(size=6), axis.title = element_text(size=8), plot.title = element_text(size=9))
-      
-       lay <- rbind(c(1),
-                    c(2),
-                    c(3),
-                    c(4),
-                    c(5))
+    recommendation_plot <- grid.arrange(grobs = intake_plots, ncol=1, padding=0)
 
-#       lay <- rbind(c(1,3),
-#                    c(2,4),
-#                    c(2,5))
-       
-    #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], layout_matrix = lay, padding=0)
-    reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], intake_plots[[3]], intake_plots[[4]], intake_plots[[5]], layout_matrix = lay, padding=0)
-    #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], intake_plots[[3]], pk_plot, fppi_plot, palb_plot, layout_matrix = lay, padding=0)
-    #reasoning_plot <- grid.arrange(intake_plots[[1]], intake_plots[[2]], pk_plot, fppi_plot, palb_plot, layout_matrix = lay, padding=0)
     #ggsave(paste0("figures/reasoning_plots/reasoning_plots_",person_id,".pdf"), plot = reasoning_plot, width = 6, height = 6, scale = 1)
     
   } # file exists
 }
+
 ```
 
 ```{r}

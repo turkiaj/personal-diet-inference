@@ -11,7 +11,7 @@ functions {
     real invsum_of_residuals = inv(sum_of_residuals);
     real invmean_of_residuals = inv(mean_of_residuals);
     
-    return -log(sum_of_residuals+0.1);
+    return -log(sum_of_residuals);
     
     // print("Qs: ", Q);
     // print("RIs: ", RI);
@@ -70,15 +70,12 @@ transformed data {
 parameters {
  
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
+  
 }
 
 transformed parameters {
 
-  // These limits should match with the priors for sampling to work
- 
-  //real<lower=Y_lower_trans[1], upper=Y_upper_trans[1]> pk_mu; 
-  //real<lower=Y_lower_trans[2], upper=Y_upper_trans[2]> fppi_mu;
-  //real<lower=Y_lower_trans[3], upper=Y_upper_trans[3]> palb_mu;
+  real preference;
 
   real pk_mu; 
   real fppi_mu;
@@ -87,26 +84,32 @@ transformed parameters {
   pk_mu = mu_q0[1] + dot_product(Q, Q_beta_point[1]) + linear_transformation;
   fppi_mu = mu_q0[2] + dot_product(Q, Q_beta_point[2]) + linear_transformation;
   palb_mu = mu_q0[3] + dot_product(Q, Q_beta_point[3]) + linear_transformation;
+  
+  preference = utility(Q, general_RI, proposal_upperlimits, r);
 }
 
 model {
   
-  // priors
+  // priors for nutrients
   
   for (i in 1:r) {
        Q[i] ~ uniform(proposal_lowerlimits[i],proposal_upperlimits[i]);
   }
+  
+  // soft limits for concentrations 
+  
+  target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_lower_trans[1]);
+  target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_upper_trans[1]);
 
-  target += cauchy_lpdf(pk_mu | Y_lower_trans[1], 1);
-  target += cauchy_lpdf(pk_mu | Y_upper_trans[1], 1);
+  target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_lower_trans[2]);
+  target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_upper_trans[2]);
 
-  target += cauchy_lpdf(fppi_mu | Y_lower_trans[2], 1);
-  target += cauchy_lpdf(fppi_mu | Y_upper_trans[2], 1);
+  target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_lower_trans[3]);
+  target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_upper_trans[3]);
 
-  target += cauchy_lpdf(palb_mu | Y_lower_trans[3], 1);
-  target += cauchy_lpdf(palb_mu | Y_upper_trans[3], 1);
+  // select preferred diet from all the equal options
 
-  target += utility(Q, general_RI, proposal_upperlimits, r);
+  target += preference;
 
   //print("target: ", target());
 
