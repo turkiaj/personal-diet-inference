@@ -66,9 +66,9 @@ rasva;Rasva;Fat;Fat;0;0;500;;;;g/d;Gaussian;1;0
 rasvaepros;Rasva;Fat E%;Fat E%;0;0;46,2;38,5;0;70;E%;Gaussian;1;0
 safa;Safa;Safa;SAFA;0;0;500;;;;g/d;Gaussian;1;0
 safaepros;Safa E%;Saturated Fatty Acids, E%;SFA, E%;100;0;19.7;15;0;30;E%;Gaussian;1;102
-mufa;Mufa;Monounsaturated Fatty Acids;MUFA;100;0;500;;;;g/d;Gaussian;1;0
+mufa;Mufa;Monounsaturated Fatty Acids;MUFA;0;0;500;;;;g/d;Gaussian;1;0
 mufaepros;Mufa E%;Monounsaturated Fatty Acids;MUFA, E%;100;0;18.1;14.4;0;30;E%;Gaussian;1;103
-pufa;Pufa;Polyunsaturated Fatty Acids;PUFA;100;0;500;;;;g/d;Gaussian;1;0
+pufa;Pufa;Polyunsaturated Fatty Acids;PUFA;0;0;500;;;;g/d;Gaussian;1;0
 pufaepros;Pufa E%;Polyunsaturated Fatty Acids;PUFA, E%;100;0;8.8;6.7;0;15;E%;Gaussian;1;104
 sakkaroosi;Sakkaroosi;Sacrose;Sacrose;0;22;85;46;0;100;g/d;Gaussian;0;0
 kuitu;Kuitu, kokonais;Fiber;Fiber;100;0;37;24;0;50;g/d;Gaussian;0;105

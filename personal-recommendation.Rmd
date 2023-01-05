@@ -99,6 +99,7 @@ dialysis$potilas <- factor(dialysis$potilas)
 # - same targets
 assumedpredictors <- dialysis_datadesc[dialysis_datadesc$Order==100,]
 assumedtargets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
+
 ```
 
 ```{r fig.width=10, fig.height=7}
@@ -132,7 +133,7 @@ dialysis_imputed <- readRDS("data/DIALYSIS_imputed_palb.rds")
 
 no_holdout <- rep(0, nrow(dialysis_imputed))
 
-initial_graph <- mebn.fully_connected_bipartite_graph(datadesc_fat_epros)
+initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
 
 # add the dialysis treatment type as a grouping factor
 dialysis_imputed$hoitoryhma <- as.factor(dialysis_imputed$hoitomuoto)
@@ -153,7 +154,7 @@ dialdiet_gamma_mv3_two_level <- mebn.bipartite_two_level_multivariate(
                                    local_model_cache = 
                                      "models/BLMM_gamma_mv_cross/two_levels", 
                                    stan_model_file = 
-                                     "mebn/v2/BLMM_gamma_two_level_grouping.stan",
+                                     "mebn/v3/BLMM_gamma_two_level_grouping.stan",
                                    normalize_values = TRUE)
 
 write.graph(dialdiet_gamma_mv3_two_level, 
@@ -163,9 +164,10 @@ write.graph(dialdiet_gamma_mv3_two_level,
 ```{r dialysis_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where three concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
 
 p <- mebn.multivariate_dens_overlays("models/BLMM_gamma_mv_cross/two_levels", assumedtargets, dialysis_imputed) 
-#ggsave("figures/ppc_mv3_cross.pdf", plot = p, width = 4, height = 4)
+#ggsave("figures/dialysis_ppc_mv3_two_levels_cross.pdf", plot = p, width = 4, height = 4)
 p
 ```
+
 ```{r extract_personal_generative_models, eval=FALSE, echo=FALSE}
 source("mebn/v3/MEBNv3.r")
 
@@ -177,7 +179,6 @@ latent_parameter_modeldir <- "models/BLMM_gamma_mv_cross/two_levels"
 #latent_parameter_modeldir <- "models/BLMM_gamma_separate/"
 
 # - use these predictors and targets
-datadesc <- datadesc_fat_epros
 target_variables <- assumedtargets
 
 # - output personal generative models (graphml + rv samples) in this dir
@@ -186,7 +187,6 @@ graph_dir <- "graphs/mv3_cross_two_levels/"
 #graph_dir <- "graphs/separate_pk_fppi/"
 
 # Loop through patients and produce the models
-
 dialysis <- readRDS("data/DIALYSIS_imputed_palb.rds")
 
 # add the dialysis treatment type as a grouping factor
@@ -194,9 +194,8 @@ dialysis$hoitoryhma <- as.factor(dialysis$hoitomuoto)
 
 patients <- levels(dialysis$potilas)
 
-#for (person_id in 1:length(patients)) {
-
-for (person_id in 36:36) {
+for (person_id in 1:length(patients)) {
+#for (person_id in 1:37) {
   
   # - initial graph structure
   initial_graph <- mebn.fully_connected_bipartite_graph(datadesc)
@@ -240,138 +239,9 @@ for (person_id in 36:36) {
 }
 
 ```
-
-```{r simulated_MSE, eval=FALSE, echo=FALSE}
-library(igraph)
-source("mebn/v3/MEBNv3.r")
-
-potassium_org_mean <- mean(dialysis$kalium) # 2755
-potassium_org_sd <- sd(dialysis$kalium) # 949
-  
-phosphorous_org_mean <- mean(dialysis$fosfori) # 2755
-phosphorous_org_sd <- sd(dialysis$fosfori) # 949
-
-pk_mean <- mean(dialysis$pk)
-fppi_mean <- mean(dialysis$fppi)
-palb_mean <- mean(dialysis$palb, na.rm = TRUE)
-
-mse_summary <- data.frame(matrix(ncol = 5, nrow = 0), row.names = NULL)
-
-model_dir <- "mv3_cross_two_levels"
-graph_dir <- paste0("graphs/",model_dir,"/")
-
-for (person_id in 36:36) {
-
-  print(paste0("Simulating patient ", person_id))
-
-  subject_code <- levels(dialysis$potilas)[person_id]
-  treatment <- unique(dialysis[dialysis$potilas == subject_code,]$hoitomuoto)
-  
-  # Normal ranges of concentration are personalized
-  personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-  recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
-  
-  recommeded_concentrations$lower_limits <- recommeded_concentrations$lower_limits
-  recommeded_concentrations$upper_limits <- recommeded_concentrations$upper_limits
-  
-  personal_model_dir <- paste0(graph_dir,person_id)
-  personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
-  
-  # Sample diet proposals and matching concentration predictions
-  
-  # Omit P-Alb
-  #V(personal_graph)["palb"]$type <- 300
-  
-  repeat_model <- mebn.Query(reaction_graph = personal_graph,
-                         graph_dir = personal_model_dir,
-                         queried_nodes = c("kalium","fosfori"),
-                         query = recommeded_concentrations,
-                         proposal_limits = c(((0 - potassium_org_mean) / potassium_org_sd),
-                                           ((5800 - potassium_org_mean) / potassium_org_sd),
-                                           ((0 - phosphorous_org_mean) / phosphorous_org_sd),
-                                           ((2550 - phosphorous_org_mean) / phosphorous_org_sd)),                         
-                         stan_model_file = "diet/general_intake_recommendation.stan",
-                         conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
-                         conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
-                         beta_point_est = "mean",
-                         param_point_est = "mean",
-                         X_point_est = "mean",
-                         posterior_samples = 1,
-                         X_sd_coef = 1,
-                         repeat_only = 1)
-
-  repeats <- rstan::extract(repeat_model)
- 
-  pk <- repeats$concentration[,,1]
-  fppi <- repeats$concentration[,,2]
-  palb <- repeats$concentration[,,3]
-   
-  true_concs <- dialysis %>%
-       filter(potilas == subject_code) %>%
-       select(havainto, pk, fppi, palb)
-  
-  personal_mse <- cbind(subject_code,
-                            model_dir,
-                            mebn.NRMSE(mean(pk), mean(true_concs$pk), pk_mean),
-                            mebn.NRMSE(mean(fppi), mean(true_concs$fppi), fppi_mean),
-                            mebn.NRMSE(mean(palb), mean(true_concs$palb), palb_mean))
-
-  mse_summary <- rbind(mse_summary, personal_mse)
-}
-
-colnames(mse_summary) <- c("subject", "reaction_model", "pk_nrmse", "fppi_nrmse", "palb_nrmse")
-
-saveRDS(mse_summary, "model_evaluation/NRMSE_comparison_mv_models.rds")
-write.csv2(mse_summary, file="model_evaluation/NRMSE_comparison_mv_models.csv", row.names = FALSE)
-
-mse_summary
-
-```
-
-```{r ri_illustration}
-library(ggplot2)
-
-# alpha_point, pk   : 21697073.0885825
-# alpha_point, fppi : 40052547.575157
-# alpha_point, palb : 60441172.1105788
-
-fppi_recommendations <- c(0.4,1.8)
-pk_recommendations <- c(3.6,4.7)
-
-x_lower <- 1
-x_upper <- 7
-
-alpha_pk <- 21697073
-mu_pk <- 3.6
-beta_pk <- alpha_pk/mu_pk
-
-pk_samples <- rgamma(n = 500, rate = beta_pk, shape = alpha_pk)
-pk_density <- with(density(pk_samples), data.frame(x, y))
-pk_density <- pk_density[pk_density$x < x_upper,]
-
-ggplot() +
-  geom_line(data = pk_density, mapping = aes(x = x, y = y), color = "darkcyan", alpha = 0.5) +
-  geom_area(data = pk_density, mapping = aes(x = x, y = y), color = "darkcyan", fill = "darkcyan", alpha = 0.5) +
-  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", size=0.2) +
-  xlim(c(x_lower , x_upper)) +
-  scale_x_continuous(breaks=c(pk_recommendations,c(0,1,2,3,4,5,6))) +
-  labs(x = "concentration", y = "density \n") +
-  theme_bw()
-
-F_pk <- ecdf(pk_samples)
-
-
-qgamma(.1, shape=alpha_pk, rate=alpha_pk/3.6)
-
-qgamma(.9, shape=alpha_pk, rate=alpha_pk/4.7)
-
-
-```
-
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
-library(gridExtra)
 library(dplyr)
   
 # Query parameters
@@ -390,13 +260,9 @@ org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
 
 queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
 
-# "protepros" "hhepros" "safaepros" "mufaepros" "pufaepros" "kuitu" "dvit" "natrium" "kalsium" "kalium" "suola" "fosfori"  "vesi"
+# -> "protepros" "hhepros" "safaepros" "mufaepros" "pufaepros" "kuitu" "dvit" "natrium" "kalsium" "kalium" "suola" "fosfori"  "vesi"
 
-#queried_nodes <- c("kalium", "fosfori", "protepros", "hhepros", "safaepros")
-#queried_nodes <- c("kalium", "fosfori")
-
-# bounds and RI are normalized
-
+# intake bounds and RI are normalized
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Upperbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
@@ -405,13 +271,13 @@ RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$
 CI <- RI # mock
 
 # - collect personal statistics in this data frame
-patient_summary <- data.frame(matrix(ncol = 19, nrow = 0), row.names = NULL)
+patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow(assumedtargets) * 3, nrow = 0), row.names = NULL)
 
-colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accepted", "max_conc_prob", "max_pk_prob", "max_fppi_prob", "max_palb_prob", "potassium_low", "phosphorous_low", "potassium_high", "phosphorous_high","pk_min","pk_max", "fppi_min", "fppi_max", "palb_min", "palb_max")
+colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-#for (person_id in 1:37) {
+for (person_id in 1:37) {
   
-  person_id <- 36
+  #person_id <- 1
 
   print(paste0("Simulating patient ", person_id))
 
@@ -428,9 +294,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
   personal_model_dir <- paste0(graph_dir,person_id)
   personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
   
-  #source("mebn/v3/MEBNv3.r")
-  
   # Sample diet proposals and matching concentration predictions
+  
+  #source("mebn/v3/MEBNv3.r")
 
   intake_model <- mebn.Query(reaction_graph = personal_graph,
                            graph_dir = personal_model_dir,
@@ -496,107 +362,111 @@ colnames(patient_summary) <- c("person_id", "subject_code", "treatment", "accept
     iid_prob = pk_prob * fppi_prob * palb_prob,
   )
   
-  # Filter all accepted diet proposals with a fixed probability limit. 
-  acceptance_probability <- 0.50
-  
-  #   This is denoted with constant 'c' in Algorithm 1.
-  recommandation_probability_levels <- c(0.90)
-  
-  accepted <- 0
-
-  # This requires all concentrations from one proposal to be accepted
-  # distribution of accepted proposals    
-
-  accepted_proposals.df <- proposal_probs.df %>%
-    filter(lowest_conc_prob >= acceptance_probability) %>%
-    as.data.frame()
-
-  print(paste0("Proposals accepted ", nrow(accepted_proposals.df)))
-  
   # Join intake and resulting concentrations
-  accepted_intake.df <- accepted_proposals.df %>% inner_join(intake_proposals.df, by="proposal")
+  accepted_intake.df <- proposal_probs.df %>% inner_join(intake_proposals.df, by="proposal")
 
-  # Highest probability that can be reached  
+  # Highest probability that can be reached
   max_conc_prob <- max(proposal_probs.df$lowest_conc_prob)
 
   # Search for the widest nutrient intake range within the accepted proposals  
-
-  accepted <- 0
-
-  accepted_recommandation_probability <- 0
-
+  
   # - Do we have any accepted proposals?
   if (nrow(accepted_intake.df) > 0)
   {
-    saveRDS(accepted_intake.df, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
     # Loop possible recommandation_probability_levels and fallback to lower level if higher returns empty
     
-    for (recommandation_probability in recommandation_probability_levels)
-    {
+      recommandation_probability <- 0.90
+      
       # Filter recommendation distributions
       recommendation_intake.df <- accepted_intake.df %>%
         filter(lowest_conc_prob >= recommandation_probability) %>%
         as.data.frame()
       
-      print(paste0("Proposals narrowed to ", nrow(recommendation_intake.df)))
+      print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
      if (nrow(recommendation_intake.df) > 0)
      {
-        accepted <- 1
-        accepted_recommandation_probability <- recommandation_probability
-  
-        # Pick 2.5% and 97.5% quantiles of recommendation posteriors as recommendation limits   
-  
-        node_index <- 1
+        RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
+        RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
+        lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
+        upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
         
-        for (node_index in 1:length(queried_nodes)) {
-          node_name <- queried_nodes[[node_index]]
-          
-          RI_mean <- mean(recommendation_intake.df[[node_name]])
-          RI_quantiles <- quantile(recommendation_intake.df[[node_name]], probs = c(0.025,0.975))
-
-        }
-
-    
-        # Break out from loop with this probability
-        break
+        personal_intake <- c(person_id,
+                             subject_code,
+                             1,
+                             RI_mean,
+                             lower_quantiles,
+                             upper_quantiles,
+                             rep(0, nrow(assumedtargets) * 3))
      } 
       else
      {
-        accepted <- 0
+         personal_intake <- c(person_id,
+                              subject_code,
+                              0,
+                              rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
      }
-    }
-  #}
 
-  # Here the min and max concentrations match the nutrient recommendations
-  personal_intake <- cbind(person_id,
-                                   subject_code,
-                                   treatment,
-                                   accepted,
-                                   max_conc_prob,
-                                   max_pk_prob = max(proposal_probs.df$pk_prob),
-                                   max_fppi_prob = max(proposal_probs.df$fppi_prob),
-                                   max_palb_prob = max(proposal_probs.df$palb_prob),
-                                   min_pot, 
-                                   min_pho, 
-                                   max_pot, 
-                                   max_pho,
-                                   accepted_recommandation_probability)
+    patient_summary <- rbind(patient_summary, personal_intake)
+  } 
+}
 
-  personal_recommendation <- cbind(personal_intake, conc_limits)
-  patient_summary <- rbind(patient_summary,personal_recommendation)
+colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-  saveRDS(personal_recommendation, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/overviews/personal_recommendation_",person_id,".rds"))
-} 
+saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+  
+```
 
-saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_posterior_params.rds"))
+```{r}
+library(kableExtra)
+
+patient_summary <- readRDS("patient_summary/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+recommendation_table.df <- data.frame(person_id <- as.numeric(patient_summary$person_id), row.names = NULL)
+
+recommendation_table.df$protepros <- linebreak(paste0(format(round(as.numeric(patient_summary$protepros),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$protepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$protepros_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$hhepros <- linebreak(paste0(format(round(as.numeric(patient_summary$hhepros),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$hhepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$hhepros_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$safaepros <- linebreak(paste0(format(round(as.numeric(patient_summary$safaepros),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$safaepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$safaepros_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$mufaepros <- linebreak(paste0(format(round(as.numeric(patient_summary$mufaepros),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$mufaepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$mufaepros_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$pufaepros <- linebreak(paste0(format(round(as.numeric(patient_summary$pufaepros),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$pufaepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$pufaepros_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$kuitu <- linebreak(paste0(format(round(as.numeric(patient_summary$kuitu),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$kuitu_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$kuitu_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$dvit <- linebreak(paste0(format(round(as.numeric(patient_summary$dvit),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$dvit_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$dvit_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$natrium <- linebreak(paste0(format(round(as.numeric(patient_summary$natrium),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$natrium_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$natrium_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$kalsium <- linebreak(paste0(format(round(as.numeric(patient_summary$kalsium),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$kalsium_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$kalsium_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$kalium <- linebreak(paste0(format(round(as.numeric(patient_summary$kalium),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$kalium_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$kalium_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$suola <- linebreak(paste0(format(round(as.numeric(patient_summary$suola),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$suola_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$suola_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$fosfori <- linebreak(paste0(format(round(as.numeric(patient_summary$fosfori),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$fosfori_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$fosfori_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+recommendation_table.df$vesi <- linebreak(paste0(format(round(as.numeric(patient_summary$vesi),2), nsmall = 2),"\n$\\left[",format(round(as.numeric(patient_summary$vesi_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$vesi_uCI),2), nsmall = 2),"\\right]$"), align = "c")
+
+kable(recommendation_table.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,
+   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.",
+   col.names = c("Person", "Protein (g/d)", "Carbonhydrates (E%)", "SFA (E%)", "MUFA (E%)", "PUFA (E%)", "Fiber (g/d)", "Vitamin D (ug/d)", "Sodium (mg/d)", "Calcium (mg/d)", "Potassium (mg/d)", "Salt (mg/d)", "Phosphorous (mg/d)", "Water (ml/d)")) %>%
+   kable_styling(latex_options="scale_down") %>%  
+   kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
+   row_spec(0,bold=TRUE) %>%
+   save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
 
 ```
+
 
 ```{r}
 library(ggplot2)
 library(gridExtra)
+library(rstan)
 
 result <- rstan::extract(intake_model)
 

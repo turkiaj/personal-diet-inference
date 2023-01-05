@@ -3481,6 +3481,8 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   predictor_nodes <- V(reaction_graph)[type == 100]
   target_nodes <- V(reaction_graph)[type == 200]
   
+  print(predictor_nodes)
+  
   predictors <- length(predictor_nodes)
   targets <- length(target_nodes)
   
@@ -3506,18 +3508,18 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
     target_node <- target_nodes[t]
     
     if (endsWith(target_node$personal_intercept, ".rds")) {
+      #print(paste0("Loading ", graph_dir, "/", target_node$personal_intercept))
       target_intercept <- unlist(readRDS(paste0(graph_dir, "/", target_node$personal_intercept)), use.names=FALSE) # vector(full_sample_size)
       intercept_samples[t,] <- target_intercept
-      #print("Found distribution for intercept parameter.")
     } else {
       print("Expected rds-file of density samples. Aborting.")
       return()
     }
 
     if (endsWith(target_node$g_alpha, ".rds")) {
+      #print(paste0("Loading ", graph_dir, "/", target_node$g_alpha))
       target_alpha <- unlist(readRDS(paste0(graph_dir, "/", target_node$g_alpha)), use.names=FALSE) # vector(full_sample_size)
       alpha_samples[t,] <- target_alpha
-      #print("Found distribution for alpha parameter.")
     } else {
       print("Expected rds-file of density samples. Aborting.")
       return()
@@ -3529,8 +3531,11 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
       # get edge connection from predictor to target
       beta_edge_id <- reaction_graph[from = predictor_nodes[p], to = target_nodes[t], edges=TRUE]
       
+      #print(paste0("Edge from ", predictor_nodes[p], " to ", target_nodes[t]))
+      
       # get distribution samples related to this edge
       # - distribution-attribute stores the name of the RDS-file that has the sample matrix
+      #print(paste0("Loading ", graph_dir, "/", E(reaction_graph)[beta_edge_id]$distribution, " in edge ", beta_edge_id))
       edge_beta_distribution <- readRDS(paste0(graph_dir, "/", E(reaction_graph)[beta_edge_id]$distribution))
       
       # combine betas in one matrix for Stan
