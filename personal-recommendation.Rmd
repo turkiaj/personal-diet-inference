@@ -102,6 +102,35 @@ assumedtargets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
 
 ```
 
+```{r}
+dialysis_conc_predictors.df <- assumedpredictors %>% 
+    mutate(Predictor = ifelse(Unit != "", paste0(Description, " (", Unit, ")"), Description)) %>%
+    mutate(RI = case_when(
+        is.na(Recommendation) ~ "",
+        Unit == "" ~ as.character(Recommendation),
+        Unit != "" ~ paste0(Recommendation, " (", Unit, ")")
+    )) %>%
+    mutate(Range = case_when(
+        is.na(Lowerbound) | is.na(Upperbound) ~ "",
+        Unit == "" ~ paste0(Lowerbound, " - ", Upperbound),
+        Unit != "" ~ paste0(Lowerbound, " - ", Upperbound, " (", Unit, ")")
+    )) %>%
+    mutate(Modified = ifelse(Condition >= 100, "Yes", "No")) %>%
+    select(Predictor, RI, Range, Modified) %>%
+    arrange(desc(Modified))
+
+kable(dialysis_conc_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,
+   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.",
+   col.names = c("Predictor", "Recommendation", "Proposed Range", "Is Modified")) %>%
+   kable_styling(latex_options="scale_down") %>%  
+   kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
+   row_spec(0,bold=TRUE) %>%
+   save_kable(file = "tables/predictors_dialysis.pdf", keep_tex = TRUE)
+
+
+```
+
+
 ```{r fig.width=10, fig.height=7}
 source("mebn/v3/MEBNv3.r")
 
@@ -239,6 +268,7 @@ for (person_id in 1:length(patients)) {
 }
 
 ```
+
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
@@ -277,7 +307,7 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 for (person_id in 1:37) {
   
-  #person_id <- 1
+ #person_id <- 1
 
   print(paste0("Simulating patient ", person_id))
 
@@ -311,11 +341,9 @@ for (person_id in 1:37) {
                            conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
                            beta_point_est = "mean",
                            param_point_est = "mean",
-                           X_sd_coef = 0, # coef = 0 forces to use the point estimate
                            X_point_est = "mean",
                            posterior_samples = 500,
-                           repeat_only = 0,
-                           condition_in_repeat = 0)
+                           repeat_only = 0)
   
   # Extract all the samples and correlate concentrations and intake with proposal ids
   
@@ -375,19 +403,19 @@ for (person_id in 1:37) {
   {
     saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
-    # Loop possible recommandation_probability_levels and fallback to lower level if higher returns empty
-    
-      recommandation_probability <- 0.90
+    recommandation_probability <- 0.90
       
-      # Filter recommendation distributions
-      recommendation_intake.df <- accepted_intake.df %>%
-        filter(lowest_conc_prob >= recommandation_probability) %>%
-        as.data.frame()
+    # Filter recommendation distributions
+    recommendation_intake.df <- accepted_intake.df %>%
+      filter(lowest_conc_prob >= recommandation_probability) %>%
+      as.data.frame()
+
+    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
-      print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
+    print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
-     if (nrow(recommendation_intake.df) > 0)
-     {
+    if (nrow(recommendation_intake.df) > 0)
+    {
         RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
         RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
         lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
@@ -400,14 +428,14 @@ for (person_id in 1:37) {
                              lower_quantiles,
                              upper_quantiles,
                              rep(0, nrow(assumedtargets) * 3))
-     } 
-      else
-     {
-         personal_intake <- c(person_id,
-                              subject_code,
-                              0,
-                              rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
-     }
+    } 
+    else
+    {
+       personal_intake <- c(person_id,
+                            subject_code,
+                            0,
+                            rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
+    }
 
     patient_summary <- rbind(patient_summary, personal_intake)
   } 
@@ -416,7 +444,7 @@ for (person_id in 1:37) {
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
 saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
-  
+
 ```
 
 ```{r}
@@ -462,6 +490,87 @@ kable(recommendation_table.df, format = "latex", escape = F, booktabs = T, row.n
 
 ```
 
+```{r concentration_predictions}
+  library(rstan)
+  library(igraph)
+  library(stringr)
+  
+  source("mebn/v3/MEBNv3.r")
+
+  queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
+  patient_summary <- readRDS("patient_summary/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+  for (subject_id in 1:37) {
+    
+    print(subject_id)
+
+    graph_dir <- paste0("graphs/mv3_cross_two_levels/",subject_id)
+    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+    
+    org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
+    org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
+    org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
+  
+    queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
+    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
+    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
+  
+    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
+    
+    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
+    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
+    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
+    
+    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    
+    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
+  
+    pk_mu_lCI <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_lCI_norm %*% params$Q_beta_point[1,]
+    fppi_mu_lCI <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_lCI_norm %*% params$Q_beta_point[2,]
+    palb_mu_lCI <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_lCI_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
+  
+    pk_mu_uCI <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_uCI_norm %*% params$Q_beta_point[1,]
+    fppi_mu_uCI <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_uCI_norm %*% params$Q_beta_point[2,]
+    palb_mu_uCI <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_uCI_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
+    
+    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
+    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
+    
+  }
+  
+  saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concs.rds"))
+
+#  4.7    1.78  45      upper
+#  6.50   0.4   92      uCI
+
+#  4.05   1.34  39
+  
+#  3.5    0.6   -2.86   lCI
+#  3.4    0.9   34      lower
+  
+  patient_summary$palb
+  
+```
+
 
 ```{r}
 library(ggplot2)
@@ -495,131 +604,21 @@ lay <- rbind(c(1),
 
 lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
 
-q1_plot <- ggplot(df) +
-  #geom_point(aes(y=lp, x=Q1, color=utility)) +
-  geom_density(aes(x = Q1, fill = lp), colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-
-q1_plot
-
-
-ggplot(recommendation_intake.df) +
-  geom_point(aes(y=fosfori, x=kalium, color=preference)) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-
-personal_RI <- recommendation_intake.df %>% slice(which.max(preference))
-
-personal_RI
-
-accepted_intake.df$p
-max_lp$kalium
-
-rec_kalium <- mean(recommendation_intake.df$kalium)
-rec_fosfori <- mean(accepted_intake.df$fosfori)
-rec_safa <- mean(accepted_intake.df$safaepros)
-rec_hh <- mean(accepted_intake.df$hhepros)
-rec_prot <- mean(accepted_intake.df$protepros)
-
-rec_kalium
+ggsave(paste0("figures/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
 ```
 
 
-
-```{r}
-#  for (node_index in 1:length(queried_nodes)) {
-#  for (node_index in 1:1) {
-    
-    node_index <- 1
-    node_name <- queried_nodes[[node_index]]
-    
-    lower_samples <- result$post_lowerlimits[,node_index]
-    upper_samples <- result$post_upperlimits[,node_index]
-    
-    df.low <- data.frame(x = lower_samples)
-    df.low$part <- "lower"
-    df.up <- data.frame(x = upper_samples)
-    df.up$part <- "upper"
-    
-    df <- rbind(df.low, df.up)
-    
-    ggplot(df) + geom_density(aes(x=x, color = part, fill = part, alpha = 0.2))
-    
-#     }
-
-node_index <- 1
-node_name <- "kalium"
-Q_low <- result$post_lower[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
-Q_high <- result$post_upper[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
-
-mean(Q_high)
-
-hist(concs.df$pk)
-hist(concs.df$fppi)
-hist(concs.df$palb)
-
-```
-
-```{r}
-library(rstan)
-library(ggplot2)
-
-opfit <- stan(file="diet/mini_utility.stan", chains = 0)
-
-m <- stan_model(file="diet/mini_utility.stan")
-
-f <- sampling(m, cores=1, chain=1)
-f
-result <- rstan::extract(f)
-
-proposal <- 1:length(result$x)
-df <- data.frame(proposal=proposal, lp=result$lp__)
-
-ggplot(df) +
-  geom_point(aes(x=proposal, y=lp))
-
-rstan::optimizing(m, data = list(), 
-    check_data = TRUE, sample_file = NULL, 
-    algorithm = "LBFGS",
-    verbose = FALSE, hessian = FALSE, as_vector = TRUE, 
-    draws = 0, constrained = TRUE, importance_resampling = FALSE)   
-
-log_prob(opfit,upars=list(y))
-
-tfun <- function(y,a,b) log_prob(opfit,upars=c(y,a,b))
-tgrfun <- function(y,a,b) grad_log_prob(opfit,upars=c(y,a,b))
-or <- optim(par=c(1,1,1), tfun, tgrfun, method = 'BFGS')
-print(or)
-
-opfit
-
-# return the gradient as an attribute
-tfun2 <- function(y) {
-  g <- grad_log_prob(opfit, y)
-  lp <- attr(g, "log_prob")
-  attr(lp, "gradient") <- g
-  lp
-}
-
-or2 <- nlm(tfun2, 10)
-or2
-
-m <- stan_model(file="diet/mini_utility.stan")
-f <- optimizing(m, hessian = FALSE, verbose = TRUE)
-#f <- sampling(m, cores=4)
-f
-```
-
-```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=14, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
+```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=10, fig.width=8, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
 library(ggplot2)
 library(gridExtra)
 library(ggrepel)
 library(dplyr)
 
 # Plot the personal recommendations
-for (person_id in 36:36) {
+for (person_id in 1:1) {
   
-  person_id <- 36
+  #person_id <- 36
   
   subject_code <- levels(dialysis$potilas)[person_id]
 
@@ -633,20 +632,14 @@ for (person_id in 36:36) {
   simulation <- "X50_B50_A50_I50"
   
   accepted_intake <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds")
+  recommendation_intake <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds")
   
-  if (file.exists(accepted_intake)) {
+  if (file.exists(recommendation_intake)) {
 
-    accepted_intake.df <- readRDS(accepted_intake)
-    concs_minmax.df <- readRDS(paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/concs_minmax_",person_id,".rds"))
-
-    # rec_file <- paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/overviews/personal_recommendation_",person_id,".rds")
-    # personal_recommendation.df <- readRDS(rec_file)
-
-    MyPalette <- c("#2860F6", "#FF7F0E", "#00BFC4", "#D62728", "#AAAAAA")
+    recommendation_intake.df <- readRDS(recommendation_intake)
     
-
     # Plotting
-    cond_intake_names <- colnames(accepted_intake.df)[9:ncol(accepted_intake.df)]
+    cond_intake_names <- colnames(recommendation_intake.df)[9:ncol(recommendation_intake.df)]
     
     number_of_cond_intake <- length(cond_intake_names)
     intake_plots <- myplots <- vector('list', number_of_cond_intake)
@@ -656,7 +649,7 @@ for (person_id in 36:36) {
       intake_name <- cond_intake_names[i]
       intake_symbol <- ensym(intake_name)
       
-      variable_desc <- datadesc[datadesc$Name == intake_name,]
+      variable_desc <- dialysis_datadesc[dialysis_datadesc$Name == intake_name,]
 
       ScaleMin <- as.numeric(variable_desc$ScaleMin)
       ScaleMax <- as.numeric(variable_desc$ScaleMax)
@@ -669,7 +662,7 @@ for (person_id in 36:36) {
       
       intake_plot <- ggplot(subset(recommendation_intake.df)) + 
         geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
-        labs(x = paste0(variable_desc$Description), y = "", size = 0.7) +
+        labs(x = paste0(variable_desc$Description, " (", variable_desc$Unit,")"), y = "", size = 1.2) +
         geom_vline(xintercept = general_RI, linetype="dashed", color = "black", size=0.5) +
         geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
         scale_x_continuous(limits=c(ScaleMin,ScaleMax), breaks=ScaleBreaks) +
@@ -681,7 +674,8 @@ for (person_id in 36:36) {
 
     recommendation_plot <- grid.arrange(grobs = intake_plots, ncol=1, padding=0)
 
-    #ggsave(paste0("figures/reasoning_plots/reasoning_plots_",person_id,".pdf"), plot = reasoning_plot, width = 6, height = 6, scale = 1)
+    #ggsave(paste0("figures/personal_recommendations/dialysis_recommendation_",person_id,".pdf"), plot = recommendation_plot, width = 6, height = 6, scale = 1)
+    ggsave(paste0("figures/personal_recommendations/dialysis_recommendation_",person_id,".pdf"), plot = recommendation_plot, scale = 1)
     
   } # file exists
 }

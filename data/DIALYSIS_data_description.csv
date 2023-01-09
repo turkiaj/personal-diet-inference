@@ -1,7 +1,7 @@
 Name;Descriptionfin;Description;ShortDescription;Order;Lowerbound;Upperbound;Recommendation;ScaleMin;ScaleMax;Unit;Distribution;Decimals;Condition
 potilas;Potilas;Patient;Patient;0;;;;;;;Bernoulli;0;0
 havainto;Havainto;Observation;Observation;0;;;;;;;Gaussian;0;0
-sukupuoli;Sukupuoli;Gender;Gender;100;;;;;;gender;Bernoulli;0;0
+sukupuoli;Sukupuoli;Gender;Gender;100;;;;;;;Bernoulli;0;0
 ika;Ika;Age;Age;0;;;;;;mg/d;Gaussian;0;0
 paino;Paino;Weight;Weight;0;;;;;;pmol/l;Gaussian;0;0
 BMI;BMI;BMI;BMI;0;;;;;;pmol/l;Gaussian;0;0
@@ -13,17 +13,17 @@ nesterajoitus;Nesterajoitus;Liquid restriction;Liquid restriction;0;;;;;;;Bernou
 verenpainelaakitys;Verenpainelaakitys;Antihypertensive;Antihypertensive;0;;;;;;;Bernoulli;0;0
 verenrasvojenlaakitys;Verenrasvojen laakitys;Blood lipid medication;Blood lipid med.;100;;;;;;;Bernoulli;0;0
 mielialalaakitys;Mielialalaakitys;Antidepressant;Antidepressant;0;;;;;;;Bernoulli;0;0
-fosforinsitoja;Fosforinsitoja;Phosphate binder med.;Phosphate binder med.;100;0;1;;;;;Bernoulli;0;0
-kaliuminsitoja;Kaliuminsitoja;Potassium binder med.;Potassium binder med.;0;0;1;;;;;Bernoulli;0;0
+fosforinsitoja;Fosforinsitoja;Phosphate binder med.;Phosphate binder med.;100;;;;;;;Bernoulli;0;0
+kaliuminsitoja;Kaliuminsitoja;Potassium binder med.;Potassium binder med.;0;0;;;;;;Bernoulli;0;0
 anemianhoito;Anemian hoito;Anemia treament;Anemia treament;0;;;;;;;Bernoulli;0;0
-diabeteslaakitys;Diabeteslaakitys;Diabetes medication;Diabetes medication;100;0;1;;;;;Bernoulli;0;0
+diabeteslaakitys;Diabeteslaakitys;Diabetes medication;Diabetes medication;100;;;;;;;Bernoulli;0;0
 antibiootti;Antibiootti;Antibiotics;Antibiotics;0;;;;;;;Bernoulli;0;0
 marevan;Marevan;Marevan;Marevan;0;;;;;;;Bernoulli;0;0
 nesteenpoisto;Nesteenpoisto;Diuretics;Diuretics;0;;;;;;;Bernoulli;0;0
 ummetuslaake;Ummetuslaake;Constipation med.;Constipation med.;0;;;;;;unit;Bernoulli;0;0
 verenohennus;Verenohennus;Anticoagulants;Anticoagulants;0;;;;;;unit;Bernoulli;0;0
-aktdvit;Hydroksikolekalsiferoli;Hydroxycholecalciferol;Hydroxycholecalciferol;100;0;100;;;;;Bernoulli;0;0
-renavit;Renavit;Renavit;Renavit;100;0;1000;;;;;Bernoulli;0;0
+aktdvit;Hydroksikolekalsiferoli;Hydroxycholecalciferol;Hydroxycholecalciferol;100;;;;;;;Bernoulli;0;0
+renavit;Renavit;Renavit;Renavit;100;;;;;;;Bernoulli;0;0
 cad;Ca-D;Ca-D;Ca-D;0;;;;;;;Bernoulli;0;0
 labraaika;Labrat;Lab. time;Lab. time;0;;;;;;;Gaussian;0;0
 ruokahalu;Ruokahalu;Appetite;Appetite;0;;;;;;;Gaussian;0;0
@@ -58,25 +58,25 @@ energiakcal;Energia (kcal);Energy (kcal);Energy;0;;;;;;kcal;Gaussian;0;0
 energiakj;Energia (kJ);Energy, kJ;Energy;0;0;;;;;kJ;Gaussian;0;0
 ekcalkg;Energia kcal/kg;Energy, kcal/kg;Energy;0;0;0;;;;kcal/kg;Gaussian;1;0
 proteiini;Proteiini;Protein;Protein;0;0;100;;;;g/d;Gaussian;1;0
-protepros;Proteiini E%;Protein, E%;Protein, E%;100;0;40;17.6;0;40;E%;Gaussian;1;100
+protepros;Proteiini E%;Protein;Protein, E%;100;13.4;22.9;17.6;0;40;E%;Gaussian;1;100
 protgkg;Prot g/kg;Protein, g/kg;Protein, g/kg;0;0;1000;;;;g/kg/d;Gaussian;1;0
 hiilihydraatti;Hiilihydraatti;Carbonhydrates;Carbonhydrates;0;0;1000;;;;g/d;Gaussian;1;0
-hhepros;Hiilihydraatti;Carbonhydrates, E%;Carbonhydrates, E%;100;0;50.9;41.7;0;70;E%;Gaussian;1;101
+hhepros;Hiilihydraatti;Carbonhydrates;Carbonhydrates, E%;100;32.6;50.9;41.7;0;70;E%;Gaussian;1;101
 rasva;Rasva;Fat;Fat;0;0;500;;;;g/d;Gaussian;1;0
-rasvaepros;Rasva;Fat E%;Fat E%;0;0;46,2;38,5;0;70;E%;Gaussian;1;0
+rasvaepros;Rasva;Fat E%;Fat E%;0;30.8;46.2;38.5;0;70;E%;Gaussian;1;0
 safa;Safa;Safa;SAFA;0;0;500;;;;g/d;Gaussian;1;0
-safaepros;Safa E%;Saturated Fatty Acids, E%;SFA, E%;100;0;19.7;15;0;30;E%;Gaussian;1;102
+safaepros;Safa E%;Saturated Fatty Acids;SFA, E%;100;10.7;19.7;15;0;30;E%;Gaussian;1;102
 mufa;Mufa;Monounsaturated Fatty Acids;MUFA;0;0;500;;;;g/d;Gaussian;1;0
-mufaepros;Mufa E%;Monounsaturated Fatty Acids;MUFA, E%;100;0;18.1;14.4;0;30;E%;Gaussian;1;103
+mufaepros;Mufa E%;Monounsaturated Fatty Acids;MUFA, E%;100;11.1;18.1;14.4;0;30;E%;Gaussian;1;103
 pufa;Pufa;Polyunsaturated Fatty Acids;PUFA;0;0;500;;;;g/d;Gaussian;1;0
-pufaepros;Pufa E%;Polyunsaturated Fatty Acids;PUFA, E%;100;0;8.8;6.7;0;15;E%;Gaussian;1;104
+pufaepros;Pufa E%;Polyunsaturated Fatty Acids;PUFA, E%;100;5.0;8.8;6.7;0;15;E%;Gaussian;1;104
 sakkaroosi;Sakkaroosi;Sacrose;Sacrose;0;22;85;46;0;100;g/d;Gaussian;0;0
-kuitu;Kuitu, kokonais;Fiber;Fiber;100;0;37;24;0;50;g/d;Gaussian;0;105
-dvit;D-vit.;Vitamin D;Vitamin D;100;0;100;10;0;100;ug/d;Gaussian;0;106
-natrium;Natrium;Sodium;Sodium;100;0;12.7;10.6;0;20;mg/d;Gaussian;0;107
-kalsium;Ca;Calcium;Calcium;100;0;2550;800;0;3000;mg/d;Gaussian;0;108
-kalium;Kalium;Potassium;Potassium;100;0;5800;3500;0;6000;mg/d;Gaussian;0;109
+kuitu;Kuitu, kokonais;Fiber;Fiber;100;14;37;24;0;50;g/d;Gaussian;0;105
+dvit;D-vit.;Vitamin D;Vitamin D;100;6.3;23.1;10;0;100;ug/d;Gaussian;0;106
+natrium;Natrium;Sodium;Sodium;100;6.7;12.7;10.6;0;20;mg/d;Gaussian;0;107
+kalsium;Ca;Calcium;Calcium;100;400;2500;800;0;3000;mg/d;Gaussian;0;108
+kalium;Kalium;Potassium;Potassium;100;0;2550;1600;0;3000;mg/d;Gaussian;0;109
 suola;Suola;Salt;Salt;100;0;5000;2000;0;5000;mg/d;Gaussian;0;110
-fosfori;Fosfori;Phosphorous;Phosphorous;100;0;2550;600;0;3000;mg/d;Gaussian;0;111
+fosfori;Fosfori;Phosphorous;Phosphorous;100;0;5800;600;0;6000;mg/d;Gaussian;0;111
 vesi;Vesi;Water;Water;100;0;5000;3000;0;7000;ml/d;Gaussian;0;112
 
