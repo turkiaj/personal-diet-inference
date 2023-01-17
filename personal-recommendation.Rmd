@@ -130,6 +130,47 @@ kable(dialysis_conc_predictors.df, format = "latex", escape = F, booktabs = T, r
 
 ```
 
+```{r}
+source("mebn/v3/MEBNv3.r")
+
+process_limits <- function(df) {
+  
+  conc_limits <- mebn.get_personal_target_guidelines(df, patient_in_dialysis = TRUE)
+  
+  subject <- df[["potilas"]]
+  pk_max <- conc_limits$upper_limits[1]
+  fppi_max <- conc_limits$upper_limits[2]
+  palb_max <- conc_limits$upper_limits[3]
+  pk_min <- conc_limits$lower_limits[1]
+  fppi_min <- conc_limits$lower_limits[2]
+  palb_min <- conc_limits$lower_limits[3]
+  
+  c(subject, pk_min, pk_max, fppi_min, fppi_max, palb_min, palb_max)
+}
+
+limits <- apply(dialysis[dialysis$havainto == 1,], 1, process_limits)
+
+conc_limits <- data.frame(t(limits))
+colnames(conc_limits) <- c("potilas", "pk_min", "pk_max", "fppi_min", "fppi_max", "palb_min", "palb_max")
+conc_limits$pk_min <- as.numeric(conc_limits$pk_min)
+conc_limits$pk_max <- as.numeric(conc_limits$pk_max)
+conc_limits$fppi_min <- as.numeric(conc_limits$fppi_min)
+conc_limits$fppi_max <- as.numeric(conc_limits$fppi_max)
+conc_limits$palb_min <- as.numeric(conc_limits$palb_min)
+conc_limits$palb_max <- as.numeric(conc_limits$palb_max)
+
+dialysis %>% 
+  group_by(potilas) %>%
+  summarize(pk_avg = mean(pk), fppi_avg = mean(fppi), palb_avg = mean(palb)) %>%
+  inner_join(conc_limits, by = "potilas") %>%
+  mutate(pk_valid = ifelse(pk_avg >= pk_min & pk_avg <= pk_max, "Yes", "No")) %>%
+  mutate(fppi_valid = ifelse(fppi_avg >= fppi_min & fppi_avg <= fppi_max, "Yes", "No")) %>%
+  mutate(palb_valid = ifelse(palb_avg >= palb_min & palb_avg <= palb_max, "Yes", "No")) %>%
+  select(potilas, pk_avg, pk_valid, fppi_avg, fppi_valid, palb_avg, palb_valid) %>%
+  arrange(pk_valid, fppi_valid, palb_valid)
+
+```
+
 
 ```{r fig.width=10, fig.height=7}
 source("mebn/v3/MEBNv3.r")
@@ -305,7 +346,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:37) {
+for (person_id in 2:2) {
   
  #person_id <- 1
 
@@ -616,7 +657,7 @@ library(ggrepel)
 library(dplyr)
 
 # Plot the personal recommendations
-for (person_id in 1:1) {
+for (person_id in 2:2) {
   
   #person_id <- 36
   
@@ -651,8 +692,11 @@ for (person_id in 1:1) {
       
       variable_desc <- dialysis_datadesc[dialysis_datadesc$Name == intake_name,]
 
-      ScaleMin <- as.numeric(variable_desc$ScaleMin)
-      ScaleMax <- as.numeric(variable_desc$ScaleMax)
+      #ScaleMin <- as.numeric(variable_desc$ScaleMin)
+      #ScaleMax <- as.numeric(variable_desc$ScaleMax)
+
+      ScaleMin <- as.numeric(variable_desc$Lowerbound)
+      ScaleMax <- as.numeric(variable_desc$Upperbound)
       
       ScaleBreaks <- seq(from = ScaleMin, to = ScaleMax, by = (ScaleMax - ScaleMin) / 5)
       

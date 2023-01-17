@@ -16,6 +16,9 @@ mebn.get_mode <- function(v) {
 
 mebn.get_personal_target_guidelines <- function(personal_info,patient_in_dialysis)
 {
+    #personal_info <- as.data.frame(personal_info)
+    #print(personal_info)
+  
     # http://webohjekirja.mylabservices.fi/ISLAB/index.php?test=1999
     # P-K, kaikki 3.4 - 4.7
     
@@ -41,12 +44,12 @@ mebn.get_personal_target_guidelines <- function(personal_info,patient_in_dialysi
       # 26.00   54.00   63.00   61.84   70.00   81.00 
       
       # # gender: female = 1, male = 0
-      if (personal_info$sukupuoli == 1)
+      if (personal_info[["sukupuoli"]] == 1)
       {
         lower_limits <- cbind(lower_limits, 0.76)
         upper_limits <- cbind(upper_limits, 1.41)
       } else {
-        if (personal_info$ika < 50)
+        if (personal_info[["ika"]] < 50)
         {
           lower_limits <- cbind(lower_limits, 0.71)
           upper_limits <- cbind(upper_limits, 1.53)
@@ -73,11 +76,11 @@ mebn.get_personal_target_guidelines <- function(personal_info,patient_in_dialysi
     # 40 - 69 V:                36 - 45 g/l
     # yli 70 V:                 34 - 45 g/l
     
-    if (personal_info$ika < 40)
+    if (personal_info[["ika"]] < 40)
     {
       lower_limits <- cbind(lower_limits, 36)
       upper_limits <- cbind(upper_limits, 48)
-    } else if (personal_info$ika < 70) {
+    } else if (personal_info[["ika"]] < 70) {
       lower_limits <- cbind(lower_limits, 36)
       upper_limits <- cbind(upper_limits, 45)
     } else {
@@ -3471,8 +3474,193 @@ mebn.GetBeta <- function(reaction_graph, graph_dir, point_est = "mean")
   return(beta_point)
 }
 
+mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, param_point_est, X_point_est, queried_nodes) {
+  
+  predictor_nodes <- V(reaction_graph)[type == 100]
+  target_nodes <- V(reaction_graph)[type == 200]
+  
+  #print(predictor_nodes)
+  
+  predictors <- length(predictor_nodes)
+  targets <- length(target_nodes)
+  
+  # Collect model parameters from the graph
+  chains <- 4
+  density_chain_samples <- 1000
+  density_samples <- density_chain_samples * chains  # sampling stored in RDS for all the chains (4*1000)
+  
+  beta_samples <- array(-1, dim = c(targets, predictors, density_samples))
+  intercept_samples <- array(-1, dim = c(targets, density_samples))
+  alpha_samples <- array(-1, dim = c(targets, density_samples))
+  
+  beta_point <- array(-1, dim = c(targets, predictors))
+  intercept_point <- array(-1, dim = c(targets))
+  alpha_point <- array(-1, dim = c(targets))
+  
+  predictor_evidence <- array(-1, dim = c(predictors, 2))
+  cond_index <- c()
+  
+  for (t in 1:targets) {
+    
+    # intercept and alpha parameters are response specific
+    target_node <- target_nodes[t]
+    
+    if (endsWith(target_node$personal_intercept, ".rds")) {
+      #print(paste0("Loading ", graph_dir, "/", target_node$personal_intercept))
+      target_intercept <- unlist(readRDS(paste0(graph_dir, "/", target_node$personal_intercept)), use.names=FALSE) # vector(full_sample_size)
+      intercept_samples[t,] <- target_intercept
+    } else {
+      print("Expected rds-file of density samples. Aborting.")
+      return()
+    }
+    
+    if (endsWith(target_node$g_alpha, ".rds")) {
+      #print(paste0("Loading ", graph_dir, "/", target_node$g_alpha))
+      target_alpha <- unlist(readRDS(paste0(graph_dir, "/", target_node$g_alpha)), use.names=FALSE) # vector(full_sample_size)
+      alpha_samples[t,] <- target_alpha
+    } else {
+      print("Expected rds-file of density samples. Aborting.")
+      return()
+    }
+    
+    # beta is collected from target/predictor
+    for (p in 1:predictors) {
+      
+      # get edge connection from predictor to target
+      beta_edge_id <- reaction_graph[from = predictor_nodes[p], to = target_nodes[t], edges=TRUE]
+      
+      #print(paste0("Edge from ", predictor_nodes[p], " to ", target_nodes[t]))
+      
+      # get distribution samples related to this edge
+      # - distribution-attribute stores the name of the RDS-file that has the sample matrix
+      #print(paste0("Loading ", graph_dir, "/", E(reaction_graph)[beta_edge_id]$distribution, " in edge ", beta_edge_id))
+      edge_beta_distribution <- readRDS(paste0(graph_dir, "/", E(reaction_graph)[beta_edge_id]$distribution))
+      
+      # combine betas in one matrix for Stan
+      beta_samples[t,p,] <- edge_beta_distribution
+      
+      # point estimates
+      if (beta_point_est == "median")
+      {
+        beta_point[t,p] <- median(beta_samples[t,p,])   
+      } 
+      else if (beta_point_est == "mean")
+      {
+        beta_point[t,p] <- mean(beta_samples[t,p,])   
+      } 
+      else if (beta_point_est == "mode")
+      {
+        beta_point[t,p] <- mebn.get_mode(beta_samples[t,p,])   
+      } 
+      else if (beta_point_est == "CI5")
+      {
+        beta_point[t,p] <- quantile(beta_samples[t,p,], probs=0.05)   
+        print("beta_point_est: CI5")
+      } 
+      else if (beta_point_est == "CI95")
+      {
+        beta_point[t,p] <- quantile(beta_samples[t,p,], probs=0.95)   
+        print("beta_point_est: CI95")
+      } 
+    }
+    
+    # point estimates
+    if (param_point_est == "median")
+    {
+      intercept_point[t] <- median(intercept_samples[t,])   
+      alpha_point[t] <- median(alpha_samples[t,]) 
+    } else
+      if (param_point_est == "mean")
+      {
+        intercept_point[t] <- mean(intercept_samples[t,])   
+        alpha_point[t] <- mean(alpha_samples[t,]) 
+      }
+  }
+  
+  # evidence is collected from predictors 
+  for (p in 1:predictors) {
+    
+    # Get soft evidence from predictor random variables
+    if (startsWith(predictor_nodes[p]$distribution, "N"))
+    {
+      # Use normalized distribution values 
+      predictor_evidence[p, 1] <- as.numeric(str_extract(predictor_nodes[p]$normdist,"(?<=N\\().+(?=,)")) # N(*,
+      predictor_evidence[p, 2] <- as.numeric(str_extract(predictor_nodes[p]$normdist,"(?<=,).+(?=\\))")) # ,*)
+    } 
+    else if (startsWith(predictor_nodes[p]$distribution, "LN")) {
+      predictor_evidence[p, 1] <- as.numeric(str_extract(predictor_nodes[p]$normdist,"(?<=LN\\().+(?=,)")) # LN(*,
+      predictor_evidence[p, 2] <- as.numeric(str_extract(predictor_nodes[p]$normdist,"(?<=,).+(?=\\))")) # ,*)
+      
+      if (is.na(predictor_evidence[p, 1]) || is.na(predictor_evidence))
+      {
+        print("Nutrient evidence contains NA")
+      }
+    } 
+    else if (startsWith(predictor_nodes[p]$distribution, "B")) {
+      predictor_evidence[p, 1] <- as.numeric(str_extract(predictor_nodes[p]$distribution,"(?<=B\\().+(?=\\))")) # B(*)
+      predictor_evidence[p, 2] <- -1
+    }
+    
+    # Collect indexes of queried nodes 
+    if (predictor_nodes[p]$name %in% queried_nodes) 
+    {
+      print(paste0(predictor_nodes[p]$name," is conditional_nutrients[",p,"]"));
+      
+      cond_index <- c(cond_index,p)
+    }
+  }
+  
+  repeat_only <- 0
+  if (length(cond_index) == 0) {repeat_only <- 1}
+  
+  if (repeat_only != 1) {
+    X_beta_point <- beta_point[,-cond_index]
+    Q_beta_point <- beta_point[,cond_index]
+    X_evidence <- predictor_evidence[-cond_index,]
+    
+    p <- predictors - length(cond_index)
+  } else  {
+    X_beta_point <- beta_point
+    Q_beta_point <- beta_point[,cond_index] # is not used
+    X_evidence <- predictor_evidence
+    
+    p <- predictors 
+  }
+  
+  if (X_point_est == "mean")
+  {
+    X_evidence_point <- X_evidence[,1]    
+    print("X_point_est: mean")
+    
+  } else if (X_point_est == "CI5")
+  {
+    X_evidence_point <- apply(X_evidence, 1, function(x) if (x[2] == -1) {x[1]} else {qnorm(p = 0.05, mean = x[1], sd = x[2], lower.tail = TRUE, log.p = FALSE)})
+    print("X_point_est: CI5")
+  } else if (X_point_est == "CI95")
+  {
+    X_evidence_point <- apply(X_evidence, 1, function(x) if (x[2] == -1) {x[1]} else {qnorm(p = 0.95, mean = x[1], sd = x[2], lower.tail = TRUE, log.p = FALSE)})    
+    print("X_point_est: CI95")
+  }
+  
+  params <- within(list(),
+                   {
+                     responses <- targets
+                     p <- p
+                     r <- length(cond_index)
+                     
+                     X_evidence <- X_evidence
+                     X_evidence_point <- X_evidence_point
+                     
+                     intercept_point <- intercept_point
+                     alpha_point <- alpha_point
+                     X_beta_point <- X_beta_point
+                     Q_beta_point <- Q_beta_point
+                   })
+  
+  return(params)
+}
 
-mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, personal_CI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, X_sd_coef, repeat_only = 0, condition_in_repeat = 0)
+mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, personal_CI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0)
 {
   library(rstan)
   library(igraph)
@@ -3481,7 +3669,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   predictor_nodes <- V(reaction_graph)[type == 100]
   target_nodes <- V(reaction_graph)[type == 200]
   
-  print(predictor_nodes)
+  #print(predictor_nodes)
   
   predictors <- length(predictor_nodes)
   targets <- length(target_nodes)
@@ -3603,13 +3791,14 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
       predictor_evidence[p, 2] <- -1
     }
     
-    # Collect indexes of queried nodes (withing prior_stats)
+    # Collect indexes of queried nodes 
     if (predictor_nodes[p]$name %in% queried_nodes) 
     {
-      print(paste0(predictor_nodes[p]$name," is conditional_nutrients[",p,"]"));
+      #print(paste0(predictor_nodes[p]$name," is conditional_nutrients[",p,"]"));
       
       cond_index <- c(cond_index,p)
     }
+    
   }
   
   offset_value <- 1000
@@ -3679,18 +3868,12 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      linear_transformation <- offset_value
                      
                      posterior_samples <- posterior_samples
-                     X_sd_coef <- X_sd_coef
-                     
-                     repeat_only <- repeat_only
-                     condition_in_repeat <- condition_in_repeat
-                     Q_index <- cond_index
-                     soft_limit_coef <- 0.1
                    })
   
   rstan_options (auto_write=TRUE)
   options (mc.cores=parallel::detectCores ())
   
-  query_result <- stan(file=stan_model_file, warmup = 1000, iter=3000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
+  query_result <- stan(file=stan_model_file, warmup = 1000, iter=2000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
 
   #m <- stan_model(file=stan_model_file)
   #query_result <- optimizing(m, data=params, seed=483892929, verbose=TRUE, init = 0)
