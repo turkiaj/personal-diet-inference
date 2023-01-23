@@ -310,6 +310,56 @@ for (person_id in 1:length(patients)) {
 
 ```
 
+```{r extract_model_parameters_to_csv}
+library(igraph) 
+
+graph_dir <- "graphs/mv3_cross_two_levels/"
+
+model_parameters <- data.frame(matrix(ncol = 7, nrow = 0), row.names = NULL)
+
+for (person_id in 1:37) {
+    
+  subject_code <- levels(dialysis$potilas)[person_id]
+  
+  personal_model_dir <- paste0(graph_dir,person_id)
+  personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
+  
+  for (t in assumedtargets$Name)
+  {
+    target_node <- V(personal_graph)[t]
+    target_alpha <- readRDS(paste0(personal_model_dir, "/", target_node$g_alpha))
+    alpha_samples <- target_alpha
+    alpha_point <- mean(unlist(alpha_samples))
+
+    for (p in assumedpredictors$Name)
+    {
+      gen <- paste0(p,"_",t)
+      beta <- V(personal_graph)[gen]$value
+  
+      per <- paste0("personal_",p,"_",t)
+      b <- V(personal_graph)[per]$value
+      
+      d <- c(person_id, subject_code, beta, b, p, t, alpha_point)
+      model_parameters <- rbind(model_parameters, d)
+    }
+  }
+
+}
+
+colnames(model_parameters) <- c("person_id", "subject_code", "general_effect", "personal_effect", "predictor", "response", "alpha")
+
+model_parameters$person_id <- as.integer(model_parameters$person_id)
+model_parameters$subject_code <- as.integer(model_parameters$subject_code)
+model_parameters$general_effect <- as.numeric(model_parameters$general_effect)
+model_parameters$personal_effect <- as.numeric(model_parameters$personal_effect)
+model_parameters$alpha <- as.numeric(model_parameters$alpha)
+
+write.csv2(model_parameters, file="patient_summary/dialysis_parameters.csv", row.names = FALSE)
+
+```
+
+
+
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
@@ -336,10 +386,9 @@ queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
 # intake bounds and RI are normalized
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Upperbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
-RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
-# TODO: get personal current intake from mean(X)
-CI <- RI # mock
+# generally recommended intake (RI)
+RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
 # - collect personal statistics in this data frame
 patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow(assumedtargets) * 3, nrow = 0), row.names = NULL)
@@ -348,7 +397,7 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 for (person_id in 2:2) {
   
- #person_id <- 1
+  #person_id <- 2
 
   print(paste0("Simulating patient ", person_id))
 
@@ -364,7 +413,7 @@ for (person_id in 2:2) {
   
   personal_model_dir <- paste0(graph_dir,person_id)
   personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
-  
+
   # Sample diet proposals and matching concentration predictions
   
   #source("mebn/v3/MEBNv3.r")
@@ -650,7 +699,7 @@ ggsave(paste0("figures/personal_recommendations/log_probability_",person_id,".pd
 ```
 
 
-```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=10, fig.width=8, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
+```{r party, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=12, fig.width=8, fig.cap="The figure is plotted with ggplot2 package for R language (v 3.3.5, https://ggplot2.tidyverse.org)."}
 library(ggplot2)
 library(gridExtra)
 library(ggrepel)
@@ -682,6 +731,8 @@ for (person_id in 2:2) {
     # Plotting
     cond_intake_names <- colnames(recommendation_intake.df)[9:ncol(recommendation_intake.df)]
     
+    prior_index <- ncol(recommendation_intake.df)
+    
     number_of_cond_intake <- length(cond_intake_names)
     intake_plots <- myplots <- vector('list', number_of_cond_intake)
     
@@ -689,6 +740,9 @@ for (person_id in 2:2) {
     {
       intake_name <- cond_intake_names[i]
       intake_symbol <- ensym(intake_name)
+      
+      proposal_intake_name <- paste0(cond_intake_names[i], "_proposal")
+      proposal_intake_symbol <- ensym(proposal_intake_name)
       
       variable_desc <- dialysis_datadesc[dialysis_datadesc$Name == intake_name,]
 
@@ -704,11 +758,15 @@ for (person_id in 2:2) {
       
       personal_RI <- mean(recommendation_intake.df[[intake_symbol]])
       
-      intake_plot <- ggplot(subset(recommendation_intake.df)) + 
-        geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
+      # sample from proposal distribution
+      recommendation_intake.df[[proposal_intake_name]] <- c(rnorm(4000, mean=general_RI, sd=(ScaleMax-ScaleMin)/10))
+
+      intake_plot <- ggplot(recommendation_intake.df) + 
+        geom_density(aes(x = !!proposal_intake_symbol), fill = "#00FF88", colour = "#002222", alpha = 0.3, show.legend = FALSE) +
+        #geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
         labs(x = paste0(variable_desc$Description, " (", variable_desc$Unit,")"), y = "", size = 1.2) +
         geom_vline(xintercept = general_RI, linetype="dashed", color = "black", size=0.5) +
-        geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
+        #geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
         scale_x_continuous(limits=c(ScaleMin,ScaleMax), breaks=ScaleBreaks) +
         theme_bw() +
         theme(axis.text.y = element_blank())

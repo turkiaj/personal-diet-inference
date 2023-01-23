@@ -3807,6 +3807,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
     X_beta_point <- beta_point[,-cond_index]
     Q_beta_point <- beta_point[,cond_index]
     X_evidence <- predictor_evidence[-cond_index,]
+    Q_evidence <- predictor_evidence[cond_index,]
     
     p <- predictors - length(cond_index)
   }
@@ -3843,8 +3844,8 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   quantile_adjusted_conc_lower_limits <- qgamma(1-quant_limit, shape=alpha_point, rate=alpha_point/conc_lower_limits)
   quantile_adjusted_conc_upper_limits <- qgamma(quant_limit, shape=alpha_point, rate=alpha_point/conc_upper_limits)
   
-  print(quantile_adjusted_conc_lower_limits)
-  print(quantile_adjusted_conc_upper_limits)
+  #print(quantile_adjusted_conc_lower_limits)
+  #print(quantile_adjusted_conc_upper_limits)
   
   params <- within(list(),
                    {
@@ -3857,7 +3858,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Y_lower_limits <- quantile_adjusted_conc_lower_limits
                      Y_upper_limits <- quantile_adjusted_conc_upper_limits
                      general_RI 
-                     personal_CI
+                     current_Q <- Q_evidence[,1]
                      X_evidence <- X_evidence
                      X_evidence_point <- X_evidence_point
                      
