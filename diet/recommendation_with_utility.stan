@@ -1,21 +1,16 @@
 functions {
   
-  real utility(vector Q, vector RI, vector Q_upperlimit, int r) {
+  real diet_preference(vector Q, vector RI, int r, real preference_strength) {
 
-    // utility aims to minimize the sum of squares between personal recommendations (Q) and current levels of Q
+    // this preference function aims to minimize the sum of squares between personal recommendations (Q) and current levels of Q
     
-    vector[r] diffs = Q;
-    real sum_of_residuals = sum(fabs(diffs));
-    real invsum_of_residuals = inv(sum_of_residuals);
-
-    return invsum_of_residuals * 100;
+    vector[r] diffs = Q - RI;
+    real sum_of_errors = sum(fabs(diffs));
     
-    // print("Qs: ", Q);
-    // print("RIs: ", RI);
-    // print("diffs: ", diffs);
-    // print("sum_of_residuals: ", sum_of_residuals);
-    // print("invsum_of_residuals: ", invsum_of_residuals);
-    // print("loginvsum_of_residuals: ", log(invsum_of_residuals));
+    // - exponential function integrates to 1 when integrated from 0 to infinity like probability distributions
+    // - negating the sum of errors makes function to increase as error decreases
+    
+    return exp(-preference_strength * sum_of_errors);
   }
   
 }
@@ -42,7 +37,8 @@ data {
     // sufficient statistics of nutrient variables X
     matrix[p,2] X_evidence;
     vector[p] X_evidence_point;
-  
+    
+    real preference_strength;
     real linear_transformation;
 }
 
@@ -79,7 +75,7 @@ transformed parameters {
   fppi_mu = mu_q0[2] + dot_product(Q, Q_beta_point[2]) + linear_transformation;
   palb_mu = mu_q0[3] + dot_product(Q, Q_beta_point[3]) + linear_transformation;
   
-  preference = utility(Q, current_Q, proposal_upperlimits, r);
+  preference = log(diet_preference(Q, current_Q, r, preference_strength));
 }
 
 model {

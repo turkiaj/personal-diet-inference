@@ -33,7 +33,7 @@ library(tidyr)
 dialysis_datadesc <- read.csv(file="data/DIALYSIS_data_description.csv", header = TRUE, sep = ";")
 
 # Read the actual data matching the description
-dialysis <- read.csv(file="data/DIALYSIS.csv", sep=";", dec=",")
+dialysis <- read.csv(file="data/DIALYSIS_imputed_palb.csv", sep=";", dec=",")
 
 # Define factors
 dialysis$potilas <- factor(dialysis$potilas)
@@ -119,13 +119,13 @@ dialysis_conc_predictors.df <- assumedpredictors %>%
     select(Predictor, RI, Range, Modified) %>%
     arrange(desc(Modified))
 
-kable(dialysis_conc_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,
+kable(dialysis_conc_predictors.df, format = "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,
    caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.",
    col.names = c("Predictor", "Recommendation", "Proposed Range", "Is Modified")) %>%
    kable_styling(latex_options="scale_down") %>%  
    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
-   row_spec(0,bold=TRUE) %>%
-   save_kable(file = "tables/predictors_dialysis.pdf", keep_tex = TRUE)
+   row_spec(0,bold=TRUE)
+   #save_kable(file = "tables/predictors_dialysis.pdf", keep_tex = TRUE)
 
 
 ```
@@ -311,14 +311,14 @@ for (person_id in 1:length(patients)) {
 ```
 
 ```{r extract_model_parameters_to_csv}
-library(igraph) 
+library(igraph)
 
 graph_dir <- "graphs/mv3_cross_two_levels/"
 
-model_parameters <- data.frame(matrix(ncol = 7, nrow = 0), row.names = NULL)
+model_parameters <- data.frame(matrix(ncol = 8, nrow = 0), row.names = NULL)
 
 for (person_id in 1:37) {
-    
+  
   subject_code <- levels(dialysis$potilas)[person_id]
   
   personal_model_dir <- paste0(graph_dir,person_id)
@@ -327,9 +327,11 @@ for (person_id in 1:37) {
   for (t in assumedtargets$Name)
   {
     target_node <- V(personal_graph)[t]
-    target_alpha <- readRDS(paste0(personal_model_dir, "/", target_node$g_alpha))
-    alpha_samples <- target_alpha
+    alpha_samples <- readRDS(paste0(personal_model_dir, "/", target_node$g_alpha))
     alpha_point <- mean(unlist(alpha_samples))
+
+    int_samples <- readRDS(paste0(personal_model_dir, "/", target_node$personal_intercept))
+    int_point <- mean(unlist(int_samples))
 
     for (p in assumedpredictors$Name)
     {
@@ -339,25 +341,63 @@ for (person_id in 1:37) {
       per <- paste0("personal_",p,"_",t)
       b <- V(personal_graph)[per]$value
       
-      d <- c(person_id, subject_code, beta, b, p, t, alpha_point)
+      d <- c(person_id, subject_code, beta, b, p, t, alpha_point, int_point)
       model_parameters <- rbind(model_parameters, d)
     }
   }
 
 }
 
-colnames(model_parameters) <- c("person_id", "subject_code", "general_effect", "personal_effect", "predictor", "response", "alpha")
+colnames(model_parameters) <- c("person_id", "subject_code", "general_effect", "personal_effect", "predictor", "response", "alpha", "personal_int")
 
 model_parameters$person_id <- as.integer(model_parameters$person_id)
 model_parameters$subject_code <- as.integer(model_parameters$subject_code)
 model_parameters$general_effect <- as.numeric(model_parameters$general_effect)
 model_parameters$personal_effect <- as.numeric(model_parameters$personal_effect)
+model_parameters$personal_int <- as.numeric(model_parameters$personal_int)
 model_parameters$alpha <- as.numeric(model_parameters$alpha)
 
 write.csv2(model_parameters, file="patient_summary/dialysis_parameters.csv", row.names = FALSE)
 
-```
+demodialysis <- dialysis[c(assumedpredictors$Name, assumedtargets$Name)]
+demodialysis$subject_code <- dialysis$potilas
+demodialysis$observation <- dialysis$havainto
 
+org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
+org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
+org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
+
+demodialysis[7:19]
+
+org_stats
+
+norm_predictors <- sapply(assumedpredictors$Name, function(x) (as.numeric(demodialysis[x]) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
+
+write.csv2(demodialysis, file="patient_summary/dialysisdiet.csv", row.names = FALSE)
+
+library(ggplot2)
+
+ggplot(demodialysis) + 
+  geom_freqpoly(aes(pk))
+
+library(dplyr)
+model_parameters
+
+subject_code <- 382
+
+X <- as.numeric(demodialysis[assumedpredictors$Name][1,])
+
+beta <- model_parameters %>% filter(person_id == 1, response == "pk") %>% select(general_effect) %>% unlist() %>% as.vector()
+alpha <- model_parameters %>% filter(person_id == 1, response == "pk", row_number()==1) %>% select(alpha) %>% as.numeric()
+
+alpha
+
+mu <- t(beta) %*% X
+
+model_parameters[model_parameters$predictor == "suola",]
+
+
+```
 
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
@@ -425,7 +465,6 @@ for (person_id in 2:2) {
                            proposal_lowerlimits = lowerbounds,
                            proposal_upperlimits = upperbounds,
                            general_RI = RI,
-                           personal_CI = CI,
                            stan_model_file = "diet/recommendation_with_utility.stan",
                            conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
                            conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
@@ -671,20 +710,20 @@ result <- rstan::extract(intake_model)
 
 proposal <- 1:length(result$lp__)
 
-df <- data.frame(proposal=proposal, lp=result$lp__, pk_mu=result$pk_mu-1000, fppi_mu=result$fppi_mu-1000, palb_mu=result$palb_mu-1000, utility=result$preference, Q1=result$Q[,1])
+df <- data.frame(proposal=proposal, lp=result$lp__, pk_mu=result$pk_mu-1000, fppi_mu=result$fppi_mu-1000, palb_mu=result$palb_mu-1000, preference=result$preference, Q1=result$Q[,1])
 
 conc_plot1 <- ggplot(df) +
-  geom_point(aes(y=lp, x=pk_mu, color=utility)) +
+  geom_point(aes(y=lp, x=pk_mu, color=preference)) +
   geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", size=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot2 <- ggplot(df) +
-  geom_point(aes(y=lp, x=fppi_mu, color=utility)) +
+  geom_point(aes(y=lp, x=fppi_mu, color=preference)) +
   geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", size=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot3 <- ggplot(df) +
-  geom_point(aes(y=lp, x=palb_mu, color=utility)) +
+  geom_point(aes(y=lp, x=palb_mu, color=preference)) +
   geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", size=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
@@ -704,16 +743,23 @@ library(ggplot2)
 library(gridExtra)
 library(ggrepel)
 library(dplyr)
+library(igraph)
+
+graph_dir <- "graphs/mv3_cross_two_levels/"
 
 # Plot the personal recommendations
 for (person_id in 2:2) {
   
-  #person_id <- 36
+  person_id <- 2
   
   subject_code <- levels(dialysis$potilas)[person_id]
 
   personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
   recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+  
+  # get personal graph for plotting the current intake
+  personal_model_dir <- paste0(graph_dir,person_id)
+  personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
 
   pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
   fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
@@ -756,17 +802,26 @@ for (person_id in 2:2) {
       
       general_RI <- as.numeric(variable_desc$Recommendation)
       
+      intake_node <- V(personal_graph)[intake_name]
+      
+      current_intake <- 0
+      if (startsWith(intake_node$distribution, "N"))
+      {
+          # get current intake from mean of intake normal distribution
+          current_intake <- as.numeric(str_extract(intake_node$distribution,"(?<=N\\().+(?=,)")) # N(*,
+      } 
+
       personal_RI <- mean(recommendation_intake.df[[intake_symbol]])
       
       # sample from proposal distribution
-      recommendation_intake.df[[proposal_intake_name]] <- c(rnorm(4000, mean=general_RI, sd=(ScaleMax-ScaleMin)/10))
+      #recommendation_intake.df[[proposal_intake_name]] <- c(rnorm(4000, mean=general_RI, sd=(ScaleMax-ScaleMin)/10))
 
       intake_plot <- ggplot(recommendation_intake.df) + 
-        geom_density(aes(x = !!proposal_intake_symbol), fill = "#00FF88", colour = "#002222", alpha = 0.3, show.legend = FALSE) +
-        #geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
+        #geom_density(aes(x = !!proposal_intake_symbol), fill = "#00FF88", colour = "#002222", alpha = 0.3, show.legend = FALSE) +
+        geom_density(aes(x = !!intake_symbol), fill = "#0000FF", colour = "#0000FF", alpha = 0.2, show.legend = FALSE) +
         labs(x = paste0(variable_desc$Description, " (", variable_desc$Unit,")"), y = "", size = 1.2) +
-        geom_vline(xintercept = general_RI, linetype="dashed", color = "black", size=0.5) +
-        #geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
+        geom_vline(xintercept = current_intake, linetype="dashed", color = "black", size=0.5) +
+        geom_vline(xintercept = personal_RI, linetype="solid", color = "black", size=0.5) +
         scale_x_continuous(limits=c(ScaleMin,ScaleMax), breaks=ScaleBreaks) +
         theme_bw() +
         theme(axis.text.y = element_blank())
