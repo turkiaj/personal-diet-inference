@@ -1,0 +1,31 @@
+Name;Description;Order;Lowerbound;Upperbound;Recommendation;ScaleMin;ScaleMax;Unit;Distribution;Condition
+sukupuoli;Gender (1-female);100;;;;;;;Bernoulli;0
+kolestrolilaakitys;Chol. medication;100;;;;;;;Bernoulli;0
+energia;Energy;100;;;;;;;Gaussian;0
+prot;Protein;100;2000;2500;1500;3000;2000;mg/d;Gaussian;100
+rasva;Fat;100;1500;2000;1200;2300;2000;mg/d;Gaussian;101
+safaepros;Saturated Fatty Acids;100;10.7;19.7;15;0;30;E%;Gaussian;102
+mufaepros;Monounsaturated Fatty Acids;100;11.1;18.1;14.4;0;30;E%;Gaussian;103
+pufaepros;Polyunsaturated Fatty Acids;100;5.0;8.8;6.7;0;15;E%;Gaussian;104
+safa;Saturated Fatty Acids;0;1.48;7.63;5.00;;;pmol/l;Gaussian;102
+mufa;Monounsaturated Fatty Acids;0;3.20;8.10;5.00;;;pmol/l;Gaussian;103
+pufa;Polyunsaturated Fatty Acids;0;3.30;4.90;5.00;;;pmol/l;Gaussian;104
+linoli;Linoleic acid;100;0.71;1.53;1.00;;;pmol/l;Gaussian;105
+linoleeni;Alpha lipoic acid;100;36.00;45.00;40.00;;;pmol/l;Gaussian;106
+kol;Cholesterol;100;1.15;1.25;1.20;;;pmol/l;Gaussian;107
+hhydr;Carbohydrates;100;;;;;;;Gaussian;108
+sakkar;Sucrose;100;;;;;;;Gaussian;109
+kuitu;Fibre;100;;;;;;;Gaussian;110
+sellul;Cellulose;100;;;;;;;Gaussian;111
+ligniini;Lignin;100;;;;;;;Gaussian;112
+alkoholi;Alcohol;100;;;;;;;Gaussian;113
+dvit;Vitamin D;100;;;;;;;Gaussian;114
+foolih;Folic acid;100;;;;;;;Gaussian;115
+cvit;Vitamin C;100;;;;;;;Gaussian;116
+epa;EPA-fatty acid;100;;;;;;;Gaussian;117
+dha;DHA-fatty acid;100;;;;;;;Gaussian;118
+fshdl;HDL-chol.;200;;;;0;7.5;unit;Gaussian;0
+fsldl;LDL-chol.;200;;;;0;7.5;unit;Gaussian;0
+fsins;Insulin;200;;;;0;45;unit;Gaussian;0
+fskol;Total chol.;200;;;;0;10;unit;Gaussian;0
+fpgluk;Glucose;200;;;;0;20;unit;Gaussian;0
