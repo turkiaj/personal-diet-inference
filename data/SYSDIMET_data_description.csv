@@ -1,7 +1,7 @@
 Name;Description;Order;Lowerbound;Upperbound;Recommendation;ScaleMin;ScaleMax;Unit;Distribution;Condition
 sukupuoli;Gender (1-female);100;;;;;;;Bernoulli;0
 kolestrolilaakitys;Chol. medication;100;;;;;;;Bernoulli;0
-energia;Energy;100;;;;;;;Gaussian;0
+energia;Energy;100;;;;;;;Gaussian;119
 prot;Protein;100;2000;2500;1500;3000;2000;mg/d;Gaussian;100
 rasva;Fat;100;1500;2000;1200;2300;2000;mg/d;Gaussian;101
 safaepros;Saturated Fatty Acids;100;10.7;19.7;15;0;30;E%;Gaussian;102

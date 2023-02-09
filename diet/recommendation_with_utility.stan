@@ -53,7 +53,7 @@ transformed data {
   for (m in 1:responses) {
     mu_q0[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
     Y_lower_trans[m] = Y_lower_limits[m] + linear_transformation;
-    Y_upper_trans[m] = Y_upper_limits[m] + linear_transformation;
+    Y_upper_trans[m] = Y_upper_limits[m] * 1.5 + linear_transformation;
   } 
 }
 
@@ -91,11 +91,17 @@ model {
   target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_lower_trans[1]);
   target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_upper_trans[1]);
 
+  //target += normal_lpdf(pk_mu | (Y_upper_trans[1]-Y_lower_trans[1]) / 2, 100);
+
   target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_lower_trans[2]);
   target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_upper_trans[2]);
 
+  //target += normal_lpdf(fppi_mu | (Y_upper_trans[2]-Y_lower_trans[2]) / 2, 100);
+
   target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_lower_trans[3]);
   target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_upper_trans[3]);
+
+  //target += normal_lpdf(palb_mu | (Y_upper_trans[3]-Y_lower_trans[3]) / 2, 100);
 
   // select preferred diet from all the equal options
 
