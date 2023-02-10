@@ -1,7 +1,7 @@
 Name;Descriptionfin;Description;ShortDescription;Unit;Order;Lowerbound;Upperbound;Recommendation;ScaleMin;ScaleMax;Distribution;Decimals;Dialysis;Sysdimet;Condition
 potilas;Potilas;Patient;Patient;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 havainto;Havainto;Observation;Observation;;0;;;;;;Gaussian;0;FALSE;FALSE;0
-sukupuoli;Sukupuoli;Gender;Gender;;100;;;;;;Bernoulli;0;FALSE;TRUE;0
+sukupuoli;Sukupuoli;Gender;Gender;;100;;;;;;Bernoulli;0;TRUE;TRUE;0
 ika;Ika;Age;Age;mg/d;0;;;;;;Gaussian;0;FALSE;FALSE;0
 paino;Paino;Weight;Weight;pmol/l;0;;;;;;Gaussian;0;FALSE;FALSE;0
 BMI;BMI;BMI;BMI;pmol/l;0;;;;;;Gaussian;0;FALSE;FALSE;0
@@ -11,19 +11,19 @@ hoitomuoto;Hoitomuoto;Dialysis type;Dialysis type;treatment;0;;;;;;Bernoulli;0;F
 munsiirre;Mun.siirre;Transplant;Transplant;pmol/l;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 nesterajoitus;Nesterajoitus;Liquid restriction;Liquid restriction;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 verenpainelaakitys;Verenpainelaakitys;Antihypertensive;Antihypertensive;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
-verenrasvojenlaakitys;Verenrasvojen laakitys;Blood lipid medication;Blood lipid med.;;100;;;;;;Bernoulli;0;FALSE;FALSE;0
+verenrasvojenlaakitys;Verenrasvojen laakitys;Blood lipid medication;Blood lipid med.;;100;;;;;;Bernoulli;0;TRUE;FALSE;0
 mielialalaakitys;Mielialalaakitys;Antidepressant;Antidepressant;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
-fosforinsitoja;Fosforinsitoja;Phosphate binder med.;Phosphate binder med.;;100;;;;;;Bernoulli;0;FALSE;FALSE;0
+fosforinsitoja;Fosforinsitoja;Phosphate binder med.;Phosphate binder med.;;100;;;;;;Bernoulli;0;TRUE;FALSE;0
 kaliuminsitoja;Kaliuminsitoja;Potassium binder med.;Potassium binder med.;;0;0;;;;;Bernoulli;0;FALSE;FALSE;0
 anemianhoito;Anemian hoito;Anemia treament;Anemia treament;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
-diabeteslaakitys;Diabeteslaakitys;Diabetes medication;Diabetes medication;;100;;;;;;Bernoulli;0;FALSE;FALSE;0
+diabeteslaakitys;Diabeteslaakitys;Diabetes medication;Diabetes medication;;100;;;;;;Bernoulli;0;TRUE;FALSE;0
 antibiootti;Antibiootti;Antibiotics;Antibiotics;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 marevan;Marevan;Marevan;Marevan;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 nesteenpoisto;Nesteenpoisto;Diuretics;Diuretics;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 ummetuslaake;Ummetuslaake;Constipation med.;Constipation med.;unit;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 verenohennus;Verenohennus;Anticoagulants;Anticoagulants;unit;0;;;;;;Bernoulli;0;FALSE;FALSE;0
-aktdvit;Hydroksikolekalsiferoli;Hydroxycholecalciferol;Hydroxycholecalciferol;;100;;;;;;Bernoulli;0;FALSE;FALSE;0
-renavit;Renavit;Renavit;Renavit;;100;;;;;;Bernoulli;0;FALSE;FALSE;0
+aktdvit;Hydroksikolekalsiferoli;Hydroxycholecalciferol;Hydroxycholecalciferol;;100;;;;;;Bernoulli;0;TRUE;FALSE;0
+renavit;Renavit;Renavit;Renavit;;100;;;;;;Bernoulli;0;TRUE;FALSE;0
 cad;Ca-D;Ca-D;Ca-D;;0;;;;;;Bernoulli;0;FALSE;FALSE;0
 labraaika;Labrat;Lab. time;Lab. time;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 ruokahalu;Ruokahalu;Appetite;Appetite;;0;;;;;;Gaussian;0;FALSE;FALSE;0
