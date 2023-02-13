@@ -353,8 +353,8 @@ mebn.set_mv_model_parameters <- function(predictor_columns, target_columns, grou
                      vk <- ncol(targets)*ncol(X);
                      Y <- Y
                      Z <- X     
-                     J <- length(levels(inputdata[[group_column]]))
-                     group <- as.integer(inputdata[[group_column]])
+                     n_s <- length(levels(inputdata[[group_column]]))
+                     subject <- as.integer(inputdata[[group_column]])
                      holdout <- targetdata
                      offset <- 100
                    })
@@ -1416,6 +1416,8 @@ mebn.two_level_multivariate_sampling <- function(inputdata, targetdata, predicto
   if (is.null(localfit))
   {
     stanDat <- mebn.set_mv_two_level_model_parameters(predictor_columns, target_columns, group_column, subject_column, inputdata, targetdata, normalize_values, reg_params)
+
+    #saveRDS(stanDat, file="stanparams.rds")
     
     #localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 100, iter=200, chains=4, init=0)
     localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 1000, iter=2000, chains=4, init=0, control = list(adapt_delta = 0.80, max_treedepth = 12))
@@ -1636,98 +1638,6 @@ mebn.bipartite_model <- function(reaction_graph, inputdata, targetdata = NULL, p
                                               b_sigma_uCI = localsummary$ranef_sd_uCI[p],
                                               shape   = "confband")
 
-      # Fixed-effect
-      reaction_graph <- reaction_graph + vertex(paste0("beta_", predictor_name, "_", target_name), 
-                                                label=paste0("beta_", predictor_name), 
-                                                type="beta", 
-                                                value = localsummary$fixef[p], 
-                                                value_lCI = localsummary$fixef_lCI[p],
-                                                value_uCI = localsummary$fixef_uCI[p],
-                                                shape = "circle")
-      
-      reaction_graph <- reaction_graph + edge(paste0("beta_", predictor_name, "_", target_name), paste0("beta_", predictor_name, "_", target_name), shape = "arrow", weight = 1, type = "beta") 
-      
-      # Add random-effect for significant predictors
-      reaction_graph <- reaction_graph + vertex(paste0("b_", predictor_name, "_", target_name), 
-                                                label=paste0("b_", predictor_name), 
-                                                type="b", 
-                                                value = 0, 
-                                                value_lCI = 0,
-                                                value_uCI = 0,
-                                                size = 0.5, 
-                                                shape = "circle")
-      
-      reaction_graph <- reaction_graph + vertex(paste0("b_sigma_", predictor_name, "_", target_name), 
-                                                label="b_sigma", 
-                                                type="b_sigma", 
-                                                value = localsummary$ranef_sd[p],
-                                                value_lCI = localsummary$ranef_sd_lCI[p],
-                                                value_uCI = localsummary$ranef_sd_uCI[p],
-                                                size = localsummary$ranef_sd[p], 
-                                                shape = "circle")
-      
-      reaction_graph <- reaction_graph + edge(paste0("b_sigma_", predictor_name, "_", target_name), 
-                                              paste0("b_", predictor_name, "_", target_name), 
-                                              shape = "arrow", 
-                                              weight = localsummary$ranef_sd[p], 
-                                              type = "b_sigma")
-      
-      reaction_graph <- reaction_graph + edge(paste0("b_", predictor_name, "_", target_name), 
-                                              target_name, shape = "arrow", 
-                                              weight=1, 
-                                              type = "b")
-    }
-    
-  } # loop targets
-  
-  return(reaction_graph)
-}
-
-##################################################
-
-mebn.bipartite_multivariate_pk_fppi <- function(reaction_graph, inputdata, targetdata = NULL, predictor_columns, assumed_targets, group_column, local_model_cache, stan_model_file, local_estimation, normalize_values = TRUE, reg_params = NULL)
-{
-  # In this version, targets are not looped, but estimated together
-
-  if (assumed_targets[1,]$Name == "pk" && assumed_targets[2,]$Name == "fppi" || assumed_targets[2,]$Name == "pk" && assumed_targets[1,]$Name == "fppi") {
-    print("Multivariate estimation of targets 'pk' and 'fppi'")
-  } else {
-    print("ERROR: Current version of mebn.bipartite_multivariate is fixed to pk and fppi target columns. Aborting.")
-    return(NULL);
-  }
-    
-  localfit <- local_estimation(inputdata, targetdata, predictor_columns, assumed_targets, group_column, local_model_cache, stan_model_file, normalize_values, reg_params)
-
-  #return(localfit);
-
-  for (c in 1:dim(assumed_targets)[1])
-  {
-    target_column <- assumed_targets[c,]
-    target_name <- as.vector(target_column$Name)
-    
-    print(target_name)
-
-    # Extract local model summary from a multivariate model
-    localsummary <- mebn.localsummary_from_multivariate(localfit, target_name)
-    
-    # - Loop through betas for current target
-    predictor_names <- as.vector(predictor_columns$Name)
-    
-    for (p in 1:length(predictor_names))
-    {
-      predictor_name <- predictor_names[p]
-      
-      # Attach the random variable
-      reaction_graph <- reaction_graph + edge(c(predictor_name, target_name), 
-                                              weight = localsummary$fixef[p], 
-                                              value = localsummary$fixef[p], 
-                                              value_lCI = localsummary$fixef_lCI[p],
-                                              value_uCI = localsummary$fixef_uCI[p],
-                                              b_sigma = localsummary$ranef_sd[p],
-                                              b_sigma_lCI = localsummary$ranef_sd_lCI[p],
-                                              b_sigma_uCI = localsummary$ranef_sd_uCI[p],
-                                              shape   = "confband")
-      
       # Fixed-effect
       reaction_graph <- reaction_graph + vertex(paste0("beta_", predictor_name, "_", target_name), 
                                                 label=paste0("beta_", predictor_name), 

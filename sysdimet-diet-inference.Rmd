@@ -1,0 +1,161 @@
+---
+title: "Personal recommendation"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(kableExtra) # for HTML and Latex tables
+
+knitr::opts_chunk$set(echo = TRUE, fig.align="center", fig.pos = 'H')
+
+# this allows using tikz rendering for plots with "dev=tikz"
+knit_hooks$set(plot = function(x, options) {
+  if ('tikz' %in% options$dev && !options$external) {
+    hook_plot_tex(x, options)
+  } else hook_plot_md(x, options)
+})
+
+# Fix seed for random number generator for getting consistent results in kmeans etc.
+fixed_seed <- 678
+
+# Load common MEBN package
+source("mebn/v3/MEBNv3.r")
+
+```
+
+```{r data_loading, echo=FALSE, message=FALSE}
+
+# Read the data description
+diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, sep = ";", dec=",")
+
+sysdimet_datadesc <- diet_datadesc[diet_datadesc$Sysdimet %in% TRUE,]
+
+# Read the actual data matching the description
+sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
+
+sysdimet <- sysdimet[order(sysdimet$SUBJECT_ID, sysdimet$WEEK),]
+
+# Define how to iterate through the graph
+sysdimet_predictors <- sysdimet_datadesc[sysdimet_datadesc$Order==100,]    
+sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,] 
+```
+
+```{r graph, fig.height = 4, fig.width=5, echo=FALSE, fig.align = "left", fig.cap="Initial, bi-partite, network structure. The figure is plotted with iGraph package for R language (v 1.2.6, https://igraph.org/r).", echo=FALSE, message=FALSE}
+library(igraph)
+initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
+
+V(initial_graph)$size = 10 
+
+# - put all blood concentrations in own rank
+bipa_layout <- layout_as_bipartite(initial_graph, types = V(initial_graph)$type == "100")
+# - flip layout sideways, from left to right
+gap <- 6
+bipa_layout <- cbind(bipa_layout[,2]*gap, bipa_layout[,1])
+
+V(initial_graph)[V(initial_graph)$type == "100"]$label.degree = pi # left side
+V(initial_graph)[V(initial_graph)$type == "200"]$label.degree = 0 # right side
+
+plot(initial_graph,
+       layout=bipa_layout, 
+       rescale=TRUE,
+       vertex.label.color="black",
+       vertex.label.cex=0.7,
+       vertex.label.dist=3.8,
+       edge.arrow.size=0.5,
+       edge.arrow.width=1,
+       axes=FALSE,
+       margin=0,
+       layout.par = par(mar=c(0,0,0,0)))
+
+```
+
+```{r graph_with_gamma_qr_mv3_full, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
+
+no_holdout <- rep(0, nrow(sysdimet))
+
+sysdimet_multivariate <- mebn.bipartite_multivariate(reaction_graph = initial_graph, 
+                                   inputdata = sysdimet,
+                                   targetdata = no_holdout,
+                                   predictor_columns = sysdimet_predictors, 
+                                   assumed_targets = sysdimet_targets, 
+                                   group_column = "SUBJECT_ID",
+                                   local_estimation = mebn.multivariate_sampling,
+                                   local_model_cache = 
+                                     "models/sysdimet/BLMM_gamma_qr_mv", 
+                                   stan_model_file = "mebn/v3/BLMM_gamma_single_mv.stan",
+                                   normalize_values = TRUE)
+
+write.graph(sysdimet_multivariate, "graphs/sysdimet_gamma_qr_mv.graphml", "graphml")
+```
+
+
+```{r sysdimet_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where the concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
+
+p <- mebn.multivariate_dens_overlays("models/sysdimet/BLMM_gamma_qr_mv", sysdimet_targets, sysdimet) 
+ggsave("figures/sysdimet_ppc_gamma_qr_mv.pdf", plot = p, width = 4, height = 4)
+p
+```
+
+
+```{r extract_personal_generative_models, eval=FALSE, echo=FALSE}
+source("mebn/v3/MEBNv3.r")
+
+# Extract generative models for patients with data from personal grouping
+
+# - latent parameters from this model
+latent_parameter_modeldir <- "models/sysdimet/BLMM_gamma_qr_mv"
+
+# - use these predictors and targets
+target_variables <- sysdimet_targets
+
+# - output personal generative models (graphml + rv samples) in this dir
+graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
+
+patients <- levels(sysdimet$SUBJECT_ID)
+
+for (person_id in 1:length(patients)) {
+
+  # - initial graph structure
+  initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
+  
+  # - pick the estimated latent variables for all the persons
+  local_distributions <- target_variables
+  local_distributions$modelcache <- latent_parameter_modeldir
+  
+  # - get personal data, normalized and original
+  
+  # - statistics for the nutrition levels are calculated from normalized data (as it was in the likelihood estimation)
+  predictors <- nrow(sysdimet_predictors)
+  normalized_input <- sapply(1:predictors, mebn.scale_gaussians, data = sysdimet, datadesc = assumedpredictors, log_transform_ln = FALSE)
+  normalized_input_df <- as.data.frame(normalized_input)
+  
+  # - pick rows for the selected person
+  subject_code <- levels(sysdimet$SUBJECT_ID)[person_id]
+  personal_data_df <- cbind(sysdimet$SUBJECT_ID, normalized_input_df)
+  personal_data_df <- personal_data_df[personal_data_df$`sysdimet$SUBJECT_ID` == subject_code,]
+  personal_data <- as.matrix(subset(personal_data_df, select = -c(`sysdimet$SUBJECT_ID`)))
+  
+  # - store also these original stats in graph
+  personal_data_org <- subset(sysdimet[sysdimet$SUBJECT_ID == subject_code,], select = as.vector(sysdimet_predictors$Name))
+  personal_concentrations_org <- subset(sysdimet[sysdimet$SUBJECT_ID == subject_code,], select = as.vector(sysdimet_targets$Name))
+  
+  personal_model_dir <- paste0(graph_dir, person_id)
+  
+  # Generate a personal graph in directory
+  
+  # one-level, univariate models
+  #personal_graph <- mebn.extract_personal_graph(person_id, initial_graph, personal_model_dir, assumedpredictors, target_variables, latent_parameter_modeldir, personal_data, personal_data_org)
+
+  # one-level model
+  personal_graph <- mebn.extract_personal_graph_from_mv(person_id, initial_graph, personal_model_dir, sysdimet_predictors, sysdimet_targets, latent_parameter_modeldir, personal_data, personal_data_org, personal_concentrations_org, datadesc)
+
+  # two-level model
+  #personal_graph <- mebn.extract_multilevel_graph(person_id, group_id, initial_graph, personal_model_dir, assumedpredictors, assumedtargets, latent_parameter_modeldir, personal_data, personal_data_org, personal_concentrations_org, datadesc)
+  
+}
+
+```
+
+
