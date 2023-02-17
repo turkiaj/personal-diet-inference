@@ -30,7 +30,7 @@ library(dplyr)
 library(tidyr)
 
 # Read the data description
-diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, sep = ";")
+diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, sep = ";", dec = ",")
 
 dialysis_datadesc <- diet_datadesc[diet_datadesc$Dialysis==TRUE,]
 
@@ -202,8 +202,6 @@ ggraph(initial_graph, layout = bipa_layout) +
 https://cran.r-project.org/web/packages/ggparty/vignettes/ggparty-graphic-partying.html
 
 ```{r graph_with_gamma_qr_mvcross_two_levels, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
-dialysis_imputed <- readRDS("data/DIALYSIS_imputed_palb.rds")
-
 no_holdout <- rep(0, nrow(dialysis_imputed))
 
 initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
@@ -406,7 +404,7 @@ library(ggplot2)
 simulation <- "X50_B50_A50_I50"
 
 # - data parameters
-graph_dir <- "graphs/mv3_cross_two_levels/"
+graph_dir <- "graphs/dialysis/mv3_cross_two_levels/"
 
 datadesc <- dialysis_datadesc
 
@@ -419,9 +417,7 @@ org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$
 org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
 org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
 
-queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
-
-# -> "protepros" "hhepros" "safaepros" "mufaepros" "pufaepros" "kuitu" "dvit" "natrium" "kalsium" "kalium" "suola" "fosfori"  "vesi"
+queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 
 # intake bounds and RI are normalized
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
@@ -435,7 +431,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:5) {
+for (person_id in 1:1) {
   
   #person_id <- 2
 
@@ -465,7 +461,7 @@ for (person_id in 1:5) {
                            proposal_lowerlimits = lowerbounds,
                            proposal_upperlimits = upperbounds,
                            general_RI = RI,
-                           stan_model_file = "diet/recommendation_with_utility.stan",
+                           stan_model_file = "diet/recommendation_with_utility_invlogit.stan",
                            conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
                            conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
                            beta_point_est = "mean",
@@ -530,7 +526,7 @@ for (person_id in 1:5) {
   # - Do we have any accepted proposals?
   if (nrow(accepted_intake.df) > 0)
   {
-    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
     recommandation_probability <- 0.90
       
@@ -539,7 +535,7 @@ for (person_id in 1:5) {
       filter(lowest_conc_prob >= recommandation_probability) %>%
       as.data.frame()
 
-    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
     print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
@@ -596,13 +592,13 @@ for (person_id in 1:5) {
   
   lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
   
-  ggsave(paste0("figures/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+  ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
 }
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 ```
 
@@ -775,7 +771,7 @@ library(ggrepel)
 library(dplyr)
 library(igraph)
 
-graph_dir <- "graphs/mv3_cross_two_levels/"
+graph_dir <- "graphs/dialysis/mv3_cross_two_levels/"
 
 # Plot the personal recommendations
 for (person_id in 1:37) {
@@ -797,8 +793,8 @@ for (person_id in 1:37) {
     
   simulation <- "X50_B50_A50_I50"
   
-  accepted_intake <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds")
-  recommendation_intake <- paste0("./patient_summary/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds")
+  accepted_intake <- paste0("./patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds")
+  recommendation_intake <- paste0("./patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds")
   
   if (file.exists(recommendation_intake)) {
 
@@ -862,7 +858,7 @@ for (person_id in 1:37) {
     recommendation_plot <- grid.arrange(grobs = intake_plots, ncol=1, padding=0)
 
     #ggsave(paste0("figures/personal_recommendations/dialysis_recommendation_",person_id,".pdf"), plot = recommendation_plot, width = 6, height = 6, scale = 1)
-    ggsave(paste0("figures/personal_recommendations/dialysis_recommendation_",person_id,".pdf"), plot = recommendation_plot, scale = 1)
+    ggsave(paste0("figures/personal_recommendations/dialysis/dialysis_recommendation_",person_id,".pdf"), plot = recommendation_plot, scale = 1)
     
   } # file exists
 }
