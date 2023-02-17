@@ -40,6 +40,7 @@ knit_hooks$set(plot = function(x, options) {
 # Fix seed for random number generator for getting consistent results in kmeans etc.
 fixed_seed <- 678
 
+# changeme
 # Load common MEBN package
 source("mebn/v3/MEBNv3.r")
 
