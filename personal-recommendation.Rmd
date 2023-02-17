@@ -30,7 +30,9 @@ library(dplyr)
 library(tidyr)
 
 # Read the data description
-dialysis_datadesc <- read.csv(file="data/DIALYSIS_data_description.csv", header = TRUE, sep = ";")
+diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, sep = ";")
+
+dialysis_datadesc <- diet_datadesc[diet_datadesc$Dialysis==TRUE,]
 
 # Read the actual data matching the description
 dialysis <- read.csv(file="data/DIALYSIS_imputed_palb.csv", sep=";", dec=",")
@@ -62,12 +64,13 @@ dialysis$pufaepros <- dialysis$pufa * 9 / dialysis$energiakcal * 100 # Rasvan en
 # dialysis$safaepros already exists in data
 
 # gender: female = 1, male = 0
-dialysis$sukupuoli <- factor(ifelse(dialysis$sukupuoli == "nainen", 1, 0))
+# already done
+#dialysis$sukupuoli <- factor(ifelse(dialysis$sukupuoli == "nainen", 1, 0))
 
 # Days between laboratory test and food record interview
 dialysis$responsedays <- difftime(as.Date(dialysis$labraaika, '%d.%m.%Y'), as.Date(dialysis$ravhaastaika, '%d.%m.%Y'), units = c("days"))
 
-responsedays_desc <- dialysis_datadesc[dialysis_datadesc$Name=="ika",]
+responsedays_desc <- dialysis_datadesc[dialysis_datadesc$Name=="sukupuoli",]
 responsedays_desc$Order <- 0 # OMITTED !!
 responsedays_desc$Distribution <- "Integer"  # Filter this out from normalization etc.
 responsedays_desc$Name <- "responsedays"
@@ -97,13 +100,13 @@ dialysis$potilas <- factor(dialysis$potilas)
 
 # Define how to iterate through the graph
 # - same targets
-assumedpredictors <- dialysis_datadesc[dialysis_datadesc$Order==100,]
-assumedtargets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
+dialysis_predictors <- dialysis_datadesc[dialysis_datadesc$Order==100,]
+dialysis_targets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
 
 ```
 
 ```{r}
-dialysis_conc_predictors.df <- assumedpredictors %>% 
+dialysis_conc_predictors.df <- dialysis_predictors %>% 
     mutate(Predictor = ifelse(Unit != "", paste0(Description, " (", Unit, ")"), Description)) %>%
     mutate(RI = case_when(
         is.na(Recommendation) ~ "",
@@ -206,23 +209,23 @@ no_holdout <- rep(0, nrow(dialysis_imputed))
 initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
 
 # add the dialysis treatment type as a grouping factor
-dialysis_imputed$hoitoryhma <- as.factor(dialysis_imputed$hoitomuoto)
+dialysis$hoitoryhma <- as.factor(dialysis$hoitomuoto)
 
 # and sort the data by treatment/patient/observation
-dialysis_imputed <- dialysis_imputed[order(dialysis_imputed$hoitoryhma, 
-                                           dialysis_imputed$potilas, dialysis_imputed$havainto),]
+dialysis <- dialysis[order(dialysis_$hoitoryhma, 
+                                           dialysis$potilas, dialysis$havainto),]
 
 dialdiet_gamma_mv3_two_level <- mebn.bipartite_two_level_multivariate(
                                    reaction_graph = initial_graph, 
-                                   inputdata = dialysis_imputed,
+                                   inputdata = dialysis_,
                                    targetdata = no_holdout,
-                                   predictor_columns = assumedpredictors, 
-                                   assumed_targets = assumedtargets, 
+                                   predictor_columns = dialysis_predictors, 
+                                   assumed_targets = dialysis_targets, 
                                    group_column = "hoitoryhma",
                                    subject_column = "potilas",
                                    local_estimation = mebn.two_level_multivariate_sampling,
                                    local_model_cache = 
-                                     "models/BLMM_gamma_mv_cross/two_levels", 
+                                     "models/dialysis/BLMM_gamma_mv_cross/two_levels", 
                                    stan_model_file = 
                                      "mebn/v3/BLMM_gamma_two_level_grouping.stan",
                                    normalize_values = TRUE)
@@ -233,8 +236,8 @@ write.graph(dialdiet_gamma_mv3_two_level,
 
 ```{r dialysis_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where three concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
 
-p <- mebn.multivariate_dens_overlays("models/BLMM_gamma_mv_cross/two_levels", assumedtargets, dialysis_imputed) 
-#ggsave("figures/dialysis_ppc_mv3_two_levels_cross.pdf", plot = p, width = 4, height = 4)
+p <- mebn.multivariate_dens_overlays("models/dialysis/BLMM_gamma_mv_cross/two_levels", dialysis_targets, dialysis) 
+ggsave("figures/dialysis_ppc_mv3_two_levels_cross.pdf", plot = p, width = 4, height = 4)
 p
 ```
 
@@ -244,20 +247,13 @@ source("mebn/v3/MEBNv3.r")
 # Extract generative models for patients with data from personal grouping
 
 # - latent parameters from this model
-latent_parameter_modeldir <- "models/BLMM_gamma_mv_cross/two_levels"
-#latent_parameter_modeldir <- "models/BLMM_gamma_qr_multivariate3/imputed_palb/"
-#latent_parameter_modeldir <- "models/BLMM_gamma_separate/"
+latent_parameter_modeldir <- "models/dialysis/BLMM_gamma_mv_cross/two_levels"
 
 # - use these predictors and targets
-target_variables <- assumedtargets
+target_variables <- dialysis_targets
 
 # - output personal generative models (graphml + rv samples) in this dir
-graph_dir <- "graphs/mv3_cross_two_levels/"
-#graph_dir <- "graphs/mv3_cross/"
-#graph_dir <- "graphs/separate_pk_fppi/"
-
-# Loop through patients and produce the models
-dialysis <- readRDS("data/DIALYSIS_imputed_palb.rds")
+graph_dir <- "graphs/dialysis/mv3_cross_two_levels/"
 
 # add the dialysis treatment type as a grouping factor
 dialysis$hoitoryhma <- as.factor(dialysis$hoitomuoto)
@@ -268,7 +264,7 @@ for (person_id in 1:length(patients)) {
 #for (person_id in 1:37) {
   
   # - initial graph structure
-  initial_graph <- mebn.fully_connected_bipartite_graph(datadesc)
+  initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
   
   # - pick the estimated latent variables for all the persons
   local_distributions <- target_variables
@@ -277,8 +273,8 @@ for (person_id in 1:length(patients)) {
   # - get personal data, normalized and original
   
   # - statistics for the nutrition levels are calculated from normalized data (as it was in the likelihood estimation)
-  predictors <- nrow(assumedpredictors)
-  normalized_input <- sapply(1:predictors, mebn.scale_gaussians, data = dialysis, datadesc = assumedpredictors, log_transform_ln = FALSE)
+  predictors <- nrow(dialysis_predictors)
+  normalized_input <- sapply(1:predictors, mebn.scale_gaussians, data = dialysis, datadesc = dialysis_predictors, log_transform_ln = FALSE)
   normalized_input_df <- as.data.frame(normalized_input)
   
   # - pick rows for the selected person
@@ -288,8 +284,8 @@ for (person_id in 1:length(patients)) {
   personal_data <- as.matrix(subset(personal_data_df, select = -c(`dialysis$potilas`)))
   
   # - store also these original stats in graph
-  personal_data_org <- subset(dialysis[dialysis$potilas == subject_code,], select = as.vector(assumedpredictors$Name))
-  personal_concentrations_org <- subset(dialysis[dialysis$potilas == subject_code,], select = as.vector(assumedtargets$Name))
+  personal_data_org <- subset(dialysis[dialysis$potilas == subject_code,], select = as.vector(dialysis_predictors$Name))
+  personal_concentrations_org <- subset(dialysis[dialysis$potilas == subject_code,], select = as.vector(dialysis_targets$Name))
   
   personal_model_dir <- paste0(graph_dir, person_id)
   
@@ -304,7 +300,7 @@ for (person_id in 1:length(patients)) {
   #personal_graph <- mebn.extract_personal_graph_from_mv(person_id, initial_graph, personal_model_dir, assumedpredictors, assumedtargets, latent_parameter_modeldir, personal_data, personal_data_org, personal_concentrations_org, datadesc)
 
   # two-level model
-  personal_graph <- mebn.extract_multilevel_graph(person_id, group_id, initial_graph, personal_model_dir, assumedpredictors, assumedtargets, latent_parameter_modeldir, personal_data, personal_data_org, personal_concentrations_org, datadesc)
+  personal_graph <- mebn.extract_multilevel_graph(person_id, group_id, initial_graph, personal_model_dir, dialysis_predictors, dialysis_targets, latent_parameter_modeldir, personal_data, personal_data_org, personal_concentrations_org, dialysis_datadesc)
   
 }
 
@@ -413,6 +409,9 @@ simulation <- "X50_B50_A50_I50"
 graph_dir <- "graphs/mv3_cross_two_levels/"
 
 datadesc <- dialysis_datadesc
+
+assumedpredictors <- dialysis_predictors
+assumedtargets <- dialysis_targets
 
 # Calculate statistics for normalizing the data
 
