@@ -399,6 +399,7 @@ source("mebn/v3/MEBNv3.r")
 library(igraph) 
 library(dplyr)
 library(ggplot2)
+library(gridExtra)
   
 # Query parameters
 simulation <- "X50_B50_A50_I50"
@@ -431,10 +432,10 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:1) {
+for (person_id in 1:37) {
   
-  #person_id <- 2
-
+  person_id <- 1
+  
   print(paste0("Simulating patient ", person_id))
 
   subject_code <- levels(dialysis$potilas)[person_id]
@@ -471,7 +472,6 @@ for (person_id in 1:1) {
                            repeat_only = 0)
   
   # Extract all the samples and correlate concentrations and intake with proposal ids
-  
   result <- rstan::extract(intake_model)
 
   pk <- result$concentration[,,1]
@@ -508,6 +508,9 @@ for (person_id in 1:1) {
   select(proposal,pk,fppi,palb) %>%
   group_by(proposal) %>%
   summarise(
+    pk_mean = mean(pk),
+    fppi_mean = mean(fppi),
+    palb_mean = mean(palb),
     pk_prob = (ecdf(pk)(pk_recommendations[2]) - ecdf(pk)(pk_recommendations[1])),
     fppi_prob = (ecdf(fppi)(fppi_recommendations[2]) - ecdf(fppi)(fppi_recommendations[1])),
     palb_prob = (ecdf(palb)(palb_recommendations[2]) - ecdf(palb)(palb_recommendations[1])),
@@ -543,15 +546,18 @@ for (person_id in 1:1) {
     {
         RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
         RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
-        lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
-        upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
+        RI_lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
+        RI_upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
         
         personal_intake <- c(person_id,
                              subject_code,
                              1,
+                             recommendation_intake.df$pk_mean,
+                             recommendation_intake.df$fppi_mean,
+                             recommendation_intake.df$palb_mean,
                              RI_mean,
-                             lower_quantiles,
-                             upper_quantiles,
+                             RI_lower_quantiles,
+                             RI_upper_quantiles,
                              rep(0, nrow(assumedtargets) * 3))
     } 
     else
@@ -559,6 +565,7 @@ for (person_id in 1:1) {
        personal_intake <- c(person_id,
                             subject_code,
                             0,
+                            0,0,0,
                             rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
     }
 
@@ -567,32 +574,32 @@ for (person_id in 1:1) {
   
   # plotting
   
-  proposal <- 1:length(result$lp__)
+  if (TRUE) {
+  
+    conc_plot1 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=pk_mean, color=preference)) +
+      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot2 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fppi_mean, color=preference)) +
+      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot3 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=palb_mean, color=preference)) +
+      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    lay <- rbind(c(1),
+                 c(2),
+                 c(3))
+    
+    lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
+    
+    ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
-  df <- data.frame(proposal=proposal, lp=result$lp__, pk_mu=result$pk_mu-1000, fppi_mu=result$fppi_mu-1000, palb_mu=result$palb_mu-1000, preference=result$preference, Q1=result$Q[,1])
-  
-  conc_plot1 <- ggplot(df) +
-    geom_point(aes(y=lp, x=pk_mu, color=preference)) +
-    geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", size=0.4) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-  
-  conc_plot2 <- ggplot(df) +
-    geom_point(aes(y=lp, x=fppi_mu, color=preference)) +
-    geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", size=0.4) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-  
-  conc_plot3 <- ggplot(df) +
-    geom_point(aes(y=lp, x=palb_mu, color=preference)) +
-    geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", size=0.4) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-  
-  lay <- rbind(c(1),
-               c(2),
-               c(3))
-  
-  lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
-  
-  ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+  }
 
 }
 
@@ -600,12 +607,158 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
+# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
+
 ```
+
+```{r concentration_predictions}
+  library(rstan)
+  library(igraph)
+  library(stringr)
+  
+  source("mebn/v3/MEBNv3.r")
+
+  queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
+  patient_summary <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+  for (subject_id in 1:37) {
+    
+    print(subject_id)
+
+    graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",subject_id)
+    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+    
+    org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
+    org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
+    org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
+  
+    queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
+    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
+    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
+  
+    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
+    
+    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
+    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
+    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
+    
+    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    
+    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
+  
+    quant_limit <- 0.9
+    pk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+    pk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+
+    fppi_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+    fppi_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+
+    palb_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+    palb_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+
+    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
+    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
+    
+    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
+    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
+    
+  }
+  
+  saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concpreds.rds"))
+
+```
+
+```{r current_levels}
+# Add current levels of intake and concentrations to the data frame
+
+queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
+
+current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(assumedtargets), nrow = 0), row.names = NULL)
+
+for (person_id in 1:37) {
+
+  graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",person_id)
+  personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+  
+  # Current intake levels
+  
+  current_intake <- c()
+  intake_nodes <- V(personal_graph)[queried_nodes]
+  
+  for (i in 1:length(queried_nodes))
+  {
+    current_dist <- intake_nodes[i]$distribution
+    
+    current_intake_level <- 0
+    if (startsWith(intake_node$distribution, "N"))
+    {
+        # get current intake from mean of intake normal distribution
+        current_intake_level <- as.numeric(str_extract(current_dist, "(?<=N\\().+(?=,)")) # N(*,
+    }
+  
+    current_intake <- c(current_intake, current_intake_level)
+  }
+  
+  # Current concentration levels
+
+  current_concs <- c()
+  conc_nodes <- V(personal_graph)[assumedtargets$Name]
+  
+  for (i in 1:length(conc_nodes))
+  {
+    current_conc_level <- conc_nodes[i]$value_mean
+    current_concs <- c(current_concs, current_conc_level)
+  }
+  
+  current_diet.df <- rbind(current_diet.df, c(as.character(person_id), current_intake, current_concs))
+}
+
+colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", assumedtargets$Name))
+
+# Join recommendations with current situation
+
+recommendation_with_concpreds.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds")
+
+recommendation_with_concpreds_and_current.df <- recommendation_with_concpreds.df %>% inner_join(current_diet.df, by="person_id")
+
+# Convert all columns as numerics
+recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendation_with_concpreds_and_current.df, as.numeric))
+
+saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
+
+```
+
+```{r result_plot}
+# Visualize the main results
+
+results.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+results.df
+
+```
+
+
+
 
 ```{r}
 library(kableExtra)
 
-patient_summary <- readRDS("patient_summary/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+patient_summary <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
 
 recommendation_table.df <- data.frame(person_id <- as.numeric(patient_summary$person_id), row.names = NULL)
 
@@ -644,88 +797,6 @@ kable(recommendation_table.df, format = "latex", escape = F, booktabs = T, row.n
    save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
 
 ```
-
-```{r concentration_predictions}
-  library(rstan)
-  library(igraph)
-  library(stringr)
-  
-  source("mebn/v3/MEBNv3.r")
-
-  queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
-  patient_summary <- readRDS("patient_summary/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
-
-  for (subject_id in 1:37) {
-    
-    print(subject_id)
-
-    graph_dir <- paste0("graphs/mv3_cross_two_levels/",subject_id)
-    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
-    
-    org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
-    org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
-    org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
-  
-    queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
-    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
-    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
-  
-    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
-    
-    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
-    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
-    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
-    
-    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    
-    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
-    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
-    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
-    
-    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
-  
-    pk_mu_lCI <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_lCI_norm %*% params$Q_beta_point[1,]
-    fppi_mu_lCI <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_lCI_norm %*% params$Q_beta_point[2,]
-    palb_mu_lCI <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_lCI_norm %*% params$Q_beta_point[3,]
-    
-    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
-  
-    pk_mu_uCI <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_uCI_norm %*% params$Q_beta_point[1,]
-    fppi_mu_uCI <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_uCI_norm %*% params$Q_beta_point[2,]
-    palb_mu_uCI <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_uCI_norm %*% params$Q_beta_point[3,]
-    
-    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
-    
-    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
-    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
-    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
-    
-  }
-  
-  saveRDS(patient_summary, paste0("patient_summary/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concs.rds"))
-
-#  4.7    1.78  45      upper
-#  6.50   0.4   92      uCI
-
-#  4.05   1.34  39
-  
-#  3.5    0.6   -2.86   lCI
-#  3.4    0.9   34      lower
-  
-  patient_summary$palb
-  
-```
-
 
 ```{r}
 library(ggplot2)
