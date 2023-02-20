@@ -433,9 +433,9 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
 for (person_id in 1:37) {
-  
-  person_id <- 1
-  
+
+  #person_id <- 1
+    
   print(paste0("Simulating patient ", person_id))
 
   subject_code <- levels(dialysis$potilas)[person_id]
@@ -477,7 +477,7 @@ for (person_id in 1:37) {
   pk <- result$concentration[,,1]
   fppi <- result$concentration[,,2]
   palb <- result$concentration[,,3]
-
+  
   proposals <- 1:dim(pk)[1]
   proposal_samples <- 1:dim(pk)[2]
 
@@ -508,9 +508,9 @@ for (person_id in 1:37) {
   select(proposal,pk,fppi,palb) %>%
   group_by(proposal) %>%
   summarise(
-    pk_mean = mean(pk),
-    fppi_mean = mean(fppi),
-    palb_mean = mean(palb),
+    pk_mu = mean(pk),
+    fppi_mu = mean(fppi),
+    palb_mu = mean(palb),
     pk_prob = (ecdf(pk)(pk_recommendations[2]) - ecdf(pk)(pk_recommendations[1])),
     fppi_prob = (ecdf(fppi)(fppi_recommendations[2]) - ecdf(fppi)(fppi_recommendations[1])),
     palb_prob = (ecdf(palb)(palb_recommendations[2]) - ecdf(palb)(palb_recommendations[1])),
@@ -574,20 +574,20 @@ for (person_id in 1:37) {
   
   # plotting
   
-  if (TRUE) {
-  
-    conc_plot1 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=pk_mean, color=preference)) +
+  if (FALSE) {
+    
+    conc_plot1 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=pk_mu, color=lowest_conc_prob)) +
       geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
-    conc_plot2 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fppi_mean, color=preference)) +
+    conc_plot2 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=fppi_mu, color=lowest_conc_prob)) +
       geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
-    conc_plot3 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=palb_mean, color=preference)) +
+    conc_plot3 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=palb_mu, color=lowest_conc_prob)) +
       geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
@@ -610,6 +610,7 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 
 ```
+
 
 ```{r concentration_predictions}
   library(rstan)
@@ -742,6 +743,109 @@ recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendat
 saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
 ```
+
+
+```{r dialysis_lp_plots, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=12, fig.width=8,}
+
+# TODO: Add current concentration levels to this plot
+
+persons <- 7
+
+simulation <- "X50_B50_A50_I50"
+conc_plots <- vector('list', persons)
+
+point_size <- 0.5
+
+for (i in 1:(persons-1)) {
+
+    accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",i,".rds"))
+
+    # Get personal normal ranges 
+  
+    subject_code <- levels(dialysis$potilas)[i]
+    personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+    recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+
+    pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+    fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+    palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+  
+    conc_plot1 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_x_continuous(breaks=pk_recommendations) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = i)
+
+    conc_plot2 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_x_continuous(breaks=fppi_recommendations) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = element_blank())
+    
+    conc_plot3 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_x_continuous(limits=c(34,45), breaks=c(34,36,45)) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = element_blank())
+    
+    conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
+    
+    conc_plots[[i]] <- conc_plot
+}
+
+i <- i + 1
+
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",i,".rds"))
+
+# Get personal normal ranges 
+
+subject_code <- levels(dialysis$potilas)[i]
+personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+
+pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+    
+conc_plot1 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_x_continuous(breaks=pk_recommendations) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(x = "P-K (mmol/l)", y = i)
+
+conc_plot2 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_x_continuous(breaks=fppi_recommendations) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  labs(x = "fP-Pi (mmol/l)", y = element_blank())
+
+conc_plot3 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_x_continuous(limits=c(34,45), breaks=c(34,36,45)) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(x = "P-Alb (mmol/l)", y = element_blank())
+
+conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
+
+conc_plots[[i]] <- conc_plot
+
+full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, persons-1),1.15))
+
+```
+
+
 
 ```{r result_plot}
 # Visualize the main results
