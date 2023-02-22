@@ -629,11 +629,11 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
     graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",subject_id)
     reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
     
-    org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
+    org_stats <- data.frame(name = subset(dialysis_predictors$Name, dialysis_predictors$Distribution == "Gaussian"))
     org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
     org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
   
-    queried_nodes <- datadesc[datadesc$Condition >= 100,]$Name
+    queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
     queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
     queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
   
@@ -680,16 +680,18 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
     
   }
   
-  saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concpreds.rds"))
+  saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
 
 ```
 
 ```{r current_levels}
 # Add current levels of intake and concentrations to the data frame
 
+datadesc <- dialysis_datadesc
+
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 
-current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(assumedtargets), nrow = 0), row.names = NULL)
+current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(dialysis_targets), nrow = 0), row.names = NULL)
 
 for (person_id in 1:37) {
 
@@ -706,7 +708,7 @@ for (person_id in 1:37) {
     current_dist <- intake_nodes[i]$distribution
     
     current_intake_level <- 0
-    if (startsWith(intake_node$distribution, "N"))
+    if (startsWith(current_dist, "N"))
     {
         # get current intake from mean of intake normal distribution
         current_intake_level <- as.numeric(str_extract(current_dist, "(?<=N\\().+(?=,)")) # N(*,
@@ -718,7 +720,7 @@ for (person_id in 1:37) {
   # Current concentration levels
 
   current_concs <- c()
-  conc_nodes <- V(personal_graph)[assumedtargets$Name]
+  conc_nodes <- V(personal_graph)[dialysis_targets$Name]
   
   for (i in 1:length(conc_nodes))
   {
@@ -729,7 +731,7 @@ for (person_id in 1:37) {
   current_diet.df <- rbind(current_diet.df, c(as.character(person_id), current_intake, current_concs))
 }
 
-colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", assumedtargets$Name))
+colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", dialysis_targets$Name))
 
 # Join recommendations with current situation
 
@@ -740,25 +742,34 @@ recommendation_with_concpreds_and_current.df <- recommendation_with_concpreds.df
 # Convert all columns as numerics
 recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendation_with_concpreds_and_current.df, as.numeric))
 
-saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
+saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
 
 ```
 
 
-```{r dialysis_lp_plots, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.height=12, fig.width=8,}
+```{r dialysis_lp_plots, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=10, fig.keep='last'}
+library(ggplot2)
+library(gridExtra)
 
-# TODO: Add current concentration levels to this plot
+concinfo.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
 
 persons <- 7
 
 simulation <- "X50_B50_A50_I50"
 conc_plots <- vector('list', persons)
 
+pk_scale_min <- min(3.4, concinfo.df$current_pk[1:persons])-0.1
+pk_scale_max <- max(4.7, concinfo.df$current_pk[1:persons])+0.1
+fppi_scale_min <- min(0.9, concinfo.df$current_fppi[1:persons])-0.1
+fppi_scale_max <- max(1.78, concinfo.df$current_fppi[1:persons])+0.1
+palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
+palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
+
 point_size <- 0.5
 
 for (i in 1:(persons-1)) {
-
-    accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",i,".rds"))
+  
+    accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",i,".rds"))
 
     # Get personal normal ranges 
   
@@ -769,28 +780,47 @@ for (i in 1:(persons-1)) {
     pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
     fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
     palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+    
+    # Get current personal info and predictions
   
+    curr_pk <- concinfo.df[concinfo.df$person_id == i,]$current_pk
+    curr_fppi <- concinfo.df[concinfo.df$person_id == i,]$current_fppi
+    curr_palb <- concinfo.df[concinfo.df$person_id == i,]$current_palb
+
+    pred_pk <- concinfo.df[concinfo.df$person_id == i,]$pk
+    pred_fppi <- concinfo.df[concinfo.df$person_id == i,]$fppi
+    pred_palb <- concinfo.df[concinfo.df$person_id == i,]$palb
+    
     conc_plot1 <- ggplot(accepted_intake.df) +
       geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_x_continuous(breaks=pk_recommendations) +
+      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
+      geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
       theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
       labs(x = element_blank(), y = i)
 
     conc_plot2 <- ggplot(accepted_intake.df) +
       geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_x_continuous(breaks=fppi_recommendations) +
+      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+      geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
       theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
       labs(x = element_blank(), y = element_blank())
     
     conc_plot3 <- ggplot(accepted_intake.df) +
       geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_x_continuous(limits=c(34,45), breaks=c(34,36,45)) +
+      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+      geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
       theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
       labs(x = element_blank(), y = element_blank())
     
@@ -815,25 +845,34 @@ palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_
     
 conc_plot1 <- ggplot(accepted_intake.df) +
   geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-  scale_x_continuous(breaks=pk_recommendations) +
+  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) + 
   scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   labs(x = "P-K (mmol/l)", y = i)
 
 conc_plot2 <- ggplot(accepted_intake.df) +
   geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-  scale_x_continuous(breaks=fppi_recommendations) +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   labs(x = "fP-Pi (mmol/l)", y = element_blank())
 
 conc_plot3 <- ggplot(accepted_intake.df) +
   geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-  scale_x_continuous(limits=c(34,45), breaks=c(34,36,45)) +
+  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
   labs(x = "P-Alb (mmol/l)", y = element_blank())
 
@@ -842,6 +881,8 @@ conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
 conc_plots[[i]] <- conc_plot
 
 full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, persons-1),1.15))
+
+ggsave(paste0("figures/dialysis_concentrations.pdf"), plot = full_conc_plot)
 
 ```
 
