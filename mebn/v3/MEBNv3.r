@@ -3514,7 +3514,7 @@ mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, p
     # Collect indexes of queried nodes 
     if (predictor_nodes[p]$name %in% queried_nodes) 
     {
-      print(paste0(predictor_nodes[p]$name," is conditional_nutrients[",p,"]"));
+      #print(paste0(predictor_nodes[p]$name," is conditional_nutrients[",p,"]"));
       
       cond_index <- c(cond_index,p)
     }
