@@ -904,17 +904,9 @@ table_colnames <- c("", cond_nutrients$ShortDescription)
 up_color <- "#F8766D"
 down_color <- "#00BFC4"
 keep_color <- "#000000"
-
-# TODO: Get amount of digits from 
-# cond_nutrients$Decimals
-
-# TODO: Add bolding for over 30% increase or decrease
-
-# TODO: Add CI columns with this
-# recommendation_table.df$protepros <- linebreak(paste0(format(round(as.numeric(patient_summary$protepros),2), nsmall =  #2),"\n$\\left[",format(round(as.numeric(patient_summary$protepros_lCI),2), nsmall = 2),"; ",format(round(as.numeric(patient_summary$protepros_uCI),2), nsmall = 2),"\\right]$"), #align = "c")
-
-
-recommendation_table.df <- intake.df %>%  
+  
+recommendation_table.df <- intake.df %>%
+                              # Recommendation cell coloring conditional on difference from current value
                               mutate(across(.cols = recommendation,
                                             .fns = ~case_when(
                                                get(glue::glue("current_{cur_column()}")) < .x ~ up_color,
@@ -922,68 +914,51 @@ recommendation_table.df <- intake.df %>%
                                                get(glue::glue("current_{cur_column()}"))  == .x ~ keep_color,
                                             ),
                                             .names = "{.col}_color")) %>%
-                              select(c("person_id", recommendation, paste0(recommendation,"_color")))
-    
-# recommendation_table.df <- intake.df[1,] %>%
-#   mutate(across(.cols = recommendation,
-#                 .fns = ~case_when(
-#                   get(glue::glue("current_{cur_column()}")) < .x ~ "up",
-#                   get(glue::glue("current_{cur_column()}"))  > .x ~ "down",
-#                   get(glue::glue("current_{cur_column()}"))  == .x ~ paste0("-"),
-#                 ),
-#                 .names = "{.col}_icon")) %>%
-#   select(c("person_id", recommendation))
+                              # Cell bolding conditional on amount of the difference (30%)
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~case_when(
+                                               ((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100 < -30 ~ TRUE,
+                                               ((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100 > 30 ~ TRUE,
+                                               .default = FALSE,
+                                            ),
+                                            .names = "{.col}_bold")) %>%
+                              # Round, format and paste as multiline-string with CI
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~linebreak(paste0(
+                                              format(round(.x, cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
+                                              "\n${^{\\left[",
+                                              format(round(get(glue::glue("{cur_column()}_lCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
+                                              "; ", 
+                                              format(round(get(glue::glue("{cur_column()}_uCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                              "\\right]}}$"), 
+                                              align="c"),
+                                            .names = "{.col}")) %>%
+                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
 
-# add empty colnames for icons
-#table_colnames <- c(rbind(table_colnames, " "))
+# Render PDF table and keep .tex 
 
-# remove last empty
-#table_colnames <- table_colnames[1:length(table_colnames)-1]
-
-kable(recommendation_table.df[1:14], format = "html", escape = F, booktabs = T, row.names = FALSE, digits = 2, col.names = table_colnames,
+kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",13)), 
+   col.names = table_colnames,
    caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.") %>%
     kable_styling(latex_options="scale_down") %>%  
     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
    row_spec(0,bold=TRUE) %>%
-   column_spec(2, color = recommendation_table.df[,15]) %>%
-   column_spec(3, color = recommendation_table.df[,16]) %>%
-   column_spec(4, color = recommendation_table.df[,17]) %>%
-   column_spec(5, color = recommendation_table.df[,18]) %>%
-   column_spec(6, color = recommendation_table.df[,19]) %>%
-   column_spec(7, color = recommendation_table.df[,20]) %>%
-   column_spec(8, color = recommendation_table.df[,21]) %>%
-   column_spec(9, color = recommendation_table.df[,22]) %>%
-   column_spec(10, color = recommendation_table.df[,23]) %>%
-   column_spec(11, color = recommendation_table.df[,24]) %>%
-   column_spec(12, color = recommendation_table.df[,25]) %>%
-   column_spec(13, color = recommendation_table.df[,26]) %>%
-   column_spec(14, color = recommendation_table.df[,27]) 
-
-# kable(recommendation_table.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2, col.names = table_colnames,
-#    caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.") %>%
-#    kable_styling(latex_options="scale_down") %>%  
-#    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
-#    row_spec(0,bold=TRUE) %>%
-#    save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
-
-kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2, col.names = table_colnames,
-   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.") %>%
-    kable_styling(latex_options="scale_down") %>%  
-    kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-   row_spec(0,bold=TRUE) %>%
-   column_spec(2, color = recommendation_table.df[,15]) %>%
-   column_spec(3, color = recommendation_table.df[,16]) %>%
-   column_spec(4, color = recommendation_table.df[,17]) %>%
-   column_spec(5, color = recommendation_table.df[,18]) %>%
-   column_spec(6, color = recommendation_table.df[,19]) %>%
-   column_spec(7, color = recommendation_table.df[,20]) %>%
-   column_spec(8, color = recommendation_table.df[,21]) %>%
-   column_spec(9, color = recommendation_table.df[,22]) %>%
-   column_spec(10, color = recommendation_table.df[,23]) %>%
-   column_spec(11, color = recommendation_table.df[,24]) %>%
-   column_spec(12, color = recommendation_table.df[,25]) %>%
-   column_spec(13, color = recommendation_table.df[,26]) %>%
-   column_spec(14, color = recommendation_table.df[,27]) %>%
+   column_spec(2, color = recommendation_table.df[,15], bold = recommendation_table.df[,28]) %>%
+   column_spec(3, color = recommendation_table.df[,16], bold = recommendation_table.df[,29]) %>%
+   column_spec(4, color = recommendation_table.df[,17], bold = recommendation_table.df[,30]) %>%
+   column_spec(5, color = recommendation_table.df[,18], bold = recommendation_table.df[,31]) %>%
+   column_spec(6, color = recommendation_table.df[,19], bold = recommendation_table.df[,32]) %>%
+   column_spec(7, color = recommendation_table.df[,20], bold = recommendation_table.df[,33]) %>%
+   column_spec(8, color = recommendation_table.df[,21], bold = recommendation_table.df[,34]) %>%
+   column_spec(9, color = recommendation_table.df[,22], bold = recommendation_table.df[,35]) %>%
+   column_spec(10, color = recommendation_table.df[,23], bold = recommendation_table.df[,36]) %>%
+   column_spec(11, color = recommendation_table.df[,24], bold = recommendation_table.df[,37]) %>%
+   column_spec(12, color = recommendation_table.df[,25], bold = recommendation_table.df[,38]) %>%
+   column_spec(13, color = recommendation_table.df[,26], bold = recommendation_table.df[,39]) %>%
+   column_spec(14, color = recommendation_table.df[,27], bold = recommendation_table.df[,40]) %>%
    save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
 
 ```
