@@ -34,6 +34,9 @@ sysdimet_datadesc <- diet_datadesc[diet_datadesc$Sysdimet %in% TRUE,]
 # Read the actual data matching the description
 sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
 
+sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
+sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
+
 sysdimet <- sysdimet[order(sysdimet$SUBJECT_ID, sysdimet$WEEK),]
 
 # Define how to iterate through the graph
@@ -116,7 +119,7 @@ graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
 patients <- levels(sysdimet$SUBJECT_ID)
 
 for (person_id in 1:length(patients)) {
-
+  
   # - initial graph structure
   initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
   
@@ -128,7 +131,7 @@ for (person_id in 1:length(patients)) {
   
   # - statistics for the nutrition levels are calculated from normalized data (as it was in the likelihood estimation)
   predictors <- nrow(sysdimet_predictors)
-  normalized_input <- sapply(1:predictors, mebn.scale_gaussians, data = sysdimet, datadesc = assumedpredictors, log_transform_ln = FALSE)
+  normalized_input <- sapply(1:predictors, mebn.scale_gaussians, data = sysdimet, datadesc = sysdimet_predictors, log_transform_ln = FALSE)
   normalized_input_df <- as.data.frame(normalized_input)
   
   # - pick rows for the selected person
@@ -136,7 +139,7 @@ for (person_id in 1:length(patients)) {
   personal_data_df <- cbind(sysdimet$SUBJECT_ID, normalized_input_df)
   personal_data_df <- personal_data_df[personal_data_df$`sysdimet$SUBJECT_ID` == subject_code,]
   personal_data <- as.matrix(subset(personal_data_df, select = -c(`sysdimet$SUBJECT_ID`)))
-  
+
   # - store also these original stats in graph
   personal_data_org <- subset(sysdimet[sysdimet$SUBJECT_ID == subject_code,], select = as.vector(sysdimet_predictors$Name))
   personal_concentrations_org <- subset(sysdimet[sysdimet$SUBJECT_ID == subject_code,], select = as.vector(sysdimet_targets$Name))
@@ -157,5 +160,578 @@ for (person_id in 1:length(patients)) {
 }
 
 ```
+
+
+```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
+source("mebn/v3/MEBNv3.r")
+library(igraph) 
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+  
+# Query parameters
+simulation <- "X50_B50_A50_I50"
+
+# - data parameters
+graph_dir <- "graphs/sysdimet/mv3_cross_two_levels/"
+
+datadesc <- sysdimet_datadesc
+
+assumedpredictors <- sysdimet_predictors
+assumedtargets <- sysdimet_targets
+
+# Calculate statistics for normalizing the data
+
+org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$Distribution == "Gaussian"))
+org_stats$mean <- sapply(org_stats$name, function(x) mean(sysdimet[[x]]))
+org_stats$sd <- sapply(org_stats$name, function(x) sd(sysdimet[[x]]))
+
+queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
+
+# intake bounds and RI are normalized
+lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
+upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Upperbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
+
+# generally recommended intake (RI)
+RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
+
+# - collect personal statistics in this data frame
+patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow(assumedtargets) * 3, nrow = 0), row.names = NULL)
+
+colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
+
+for (person_id in 1:37) {
+
+  #person_id <- 1
+    
+  print(paste0("Simulating patient ", person_id))
+
+  subject_code <- levels(sysdimet$potilas)[person_id]
+  treatment <- unique(sysdimet[sysdimet$potilas == subject_code,]$hoitomuoto)
+  
+  # Normal ranges of concentration are personalized
+  personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+  
+  #print(paste0("personal lower limits: ", as.vector(recommeded_concentrations$lower_limits)))
+  #print(paste0("personal upper limits: ", as.vector(recommeded_concentrations$upper_limits)))
+  
+  personal_model_dir <- paste0(graph_dir,person_id)
+  personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
+
+  # Sample diet proposals and matching concentration predictions
+  
+  #source("mebn/v3/MEBNv3.r")
+
+  intake_model <- mebn.Query(reaction_graph = personal_graph,
+                           graph_dir = personal_model_dir,
+                           queried_nodes = queried_nodes,
+                           query = recommeded_concentrations,
+                           proposal_lowerlimits = lowerbounds,
+                           proposal_upperlimits = upperbounds,
+                           general_RI = RI,
+                           stan_model_file = "diet/recommendation_with_utility_invlogit.stan",
+                           conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
+                           conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
+                           beta_point_est = "mean",
+                           param_point_est = "mean",
+                           X_point_est = "mean",
+                           posterior_samples = 500,
+                           repeat_only = 0)
+  
+  # Extract all the samples and correlate concentrations and intake with proposal ids
+  result <- rstan::extract(intake_model)
+
+  pk <- result$concentration[,,1]
+  fppi <- result$concentration[,,2]
+  palb <- result$concentration[,,3]
+  
+  proposals <- 1:dim(pk)[1]
+  proposal_samples <- 1:dim(pk)[2]
+
+  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), pk=as.vector(t(pk)),fppi=as.vector(t(fppi)),palb=as.vector(t(palb)))
+  
+  # Get the original scale levels of potassium and potassium from each diet proposal
+  intake_proposals.df <- data.frame(proposal=proposals)
+
+  intake_proposals.df$lp <- result$lp__
+  intake_proposals.df$u <- result$preference
+  
+  for (node_index in 1:length(queried_nodes)) {
+    node_name <- queried_nodes[[node_index]]
+    Q_proposal <- result$Q[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
+    intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
+  }
+  
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", queried_nodes)
+  
+  #  Calculate probability of each proposal being within the recommended concentration limits.
+  #  The calculation is done based on empirical cumulative distribution function (ecdf) for each concentration distribution. 
+  
+  pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+  fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+  palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+
+  proposal_probs.df <- concs.df %>%
+  select(proposal,pk,fppi,palb) %>%
+  group_by(proposal) %>%
+  summarise(
+    pk_mu = mean(pk),
+    fppi_mu = mean(fppi),
+    palb_mu = mean(palb),
+    pk_prob = (ecdf(pk)(pk_recommendations[2]) - ecdf(pk)(pk_recommendations[1])),
+    fppi_prob = (ecdf(fppi)(fppi_recommendations[2]) - ecdf(fppi)(fppi_recommendations[1])),
+    palb_prob = (ecdf(palb)(palb_recommendations[2]) - ecdf(palb)(palb_recommendations[1])),
+    lowest_conc_prob = min(pk_prob, fppi_prob, palb_prob),
+    iid_prob = pk_prob * fppi_prob * palb_prob,
+  )
+  
+  # Join intake and resulting concentrations
+  accepted_intake.df <- proposal_probs.df %>% inner_join(intake_proposals.df, by="proposal")
+
+  # Highest probability that can be reached
+  max_conc_prob <- max(proposal_probs.df$lowest_conc_prob)
+
+  # Search for the widest nutrient intake range within the accepted proposals  
+  
+  # - Do we have any accepted proposals?
+  if (nrow(accepted_intake.df) > 0)
+  {
+    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+
+    recommandation_probability <- 0.90
+      
+    # Filter recommendation distributions
+    recommendation_intake.df <- accepted_intake.df %>%
+      filter(lowest_conc_prob >= recommandation_probability) %>%
+      as.data.frame()
+
+    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+      
+    print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
+  
+    if (nrow(recommendation_intake.df) > 0)
+    {
+        RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
+        RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
+        RI_lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
+        RI_upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
+        
+        personal_intake <- c(person_id,
+                             subject_code,
+                             1,
+                             recommendation_intake.df$pk_mean,
+                             recommendation_intake.df$fppi_mean,
+                             recommendation_intake.df$palb_mean,
+                             RI_mean,
+                             RI_lower_quantiles,
+                             RI_upper_quantiles,
+                             rep(0, nrow(assumedtargets) * 3))
+    } 
+    else
+    {
+       personal_intake <- c(person_id,
+                            subject_code,
+                            0,
+                            0,0,0,
+                            rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
+    }
+
+    patient_summary <- rbind(patient_summary, personal_intake)
+  }
+  
+  # plotting
+  
+  if (FALSE) {
+    
+    conc_plot1 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=pk_mu, color=lowest_conc_prob)) +
+      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot2 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=fppi_mu, color=lowest_conc_prob)) +
+      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot3 <- ggplot(recommendation_intake.df) +
+      geom_point(aes(y=lp, x=palb_mu, color=lowest_conc_prob)) +
+      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    lay <- rbind(c(1),
+                 c(2),
+                 c(3))
+    
+    lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
+    
+    ggsave(paste0("figures/sysdimet/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+
+  }
+
+}
+
+colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
+
+saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+
+# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
+
+```
+
+
+```{r concentration_predictions}
+  library(rstan)
+  library(igraph)
+  library(stringr)
+  
+  source("mebn/v3/MEBNv3.r")
+
+  queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
+  patient_summary <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+  for (subject_id in 1:37) {
+    
+    print(subject_id)
+
+    graph_dir <- paste0("graphs/sysdimet/mv3_cross_two_levels/",subject_id)
+    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+    
+    org_stats <- data.frame(name = subset(sysdimet_predictors$Name, sysdimet_predictors$Distribution == "Gaussian"))
+    org_stats$mean <- sapply(org_stats$name, function(x) mean(sysdimet[[x]]))
+    org_stats$sd <- sapply(org_stats$name, function(x) sd(sysdimet[[x]]))
+  
+    queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
+    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
+    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
+  
+    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
+    
+    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
+    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
+    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
+    
+    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    
+    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
+  
+    quant_limit <- 0.9
+    pk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+    pk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+
+    fppi_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+    fppi_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+
+    palb_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+    palb_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+
+    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
+    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
+    
+    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
+    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
+    
+  }
+  
+  saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
+
+```
+
+```{r current_levels}
+# Add current levels of intake and concentrations to the data frame
+
+datadesc <- sysdimet_datadesc
+
+queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
+
+current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(sysdimet_targets), nrow = 0), row.names = NULL)
+
+for (person_id in 1:37) {
+
+  graph_dir <- paste0("graphs/sysdimet/mv3_cross_two_levels/",person_id)
+  personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+  
+  # Current intake levels
+  
+  current_intake <- c()
+  intake_nodes <- V(personal_graph)[queried_nodes]
+  
+  for (i in 1:length(queried_nodes))
+  {
+    current_dist <- intake_nodes[i]$distribution
+    
+    current_intake_level <- 0
+    if (startsWith(current_dist, "N"))
+    {
+        # get current intake from mean of intake normal distribution
+        current_intake_level <- as.numeric(str_extract(current_dist, "(?<=N\\().+(?=,)")) # N(*,
+    }
+  
+    current_intake <- c(current_intake, current_intake_level)
+  }
+  
+  # Current concentration levels
+
+  current_concs <- c()
+  conc_nodes <- V(personal_graph)[sysdimet_targets$Name]
+  
+  for (i in 1:length(conc_nodes))
+  {
+    current_conc_level <- conc_nodes[i]$value_mean
+    current_concs <- c(current_concs, current_conc_level)
+  }
+  
+  current_diet.df <- rbind(current_diet.df, c(as.character(person_id), current_intake, current_concs))
+}
+
+colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", sysdimet_targets$Name))
+
+# Join recommendations with current situation
+
+recommendation_with_concpreds.df <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds")
+
+recommendation_with_concpreds_and_current.df <- recommendation_with_concpreds.df %>% inner_join(current_diet.df, by="person_id")
+
+# Convert all columns as numerics
+recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendation_with_concpreds_and_current.df, as.numeric))
+
+saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
+
+```
+
+
+```{r sysdimet_lp_plots, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=10, fig.keep='last'}
+library(ggplot2)
+library(gridExtra)
+
+concinfo.df <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+persons <- 7
+
+simulation <- "X50_B50_A50_I50"
+conc_plots <- vector('list', persons)
+
+pk_scale_min <- min(3.4, concinfo.df$current_pk[1:persons])-0.1
+pk_scale_max <- max(4.7, concinfo.df$current_pk[1:persons])+0.1
+fppi_scale_min <- min(0.9, concinfo.df$current_fppi[1:persons])-0.1
+fppi_scale_max <- max(1.78, concinfo.df$current_fppi[1:persons])+0.1
+palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
+palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
+
+point_size <- 0.5
+
+for (i in 1:(persons-1)) {
+  
+    accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",i,".rds"))
+
+    # Get personal normal ranges 
+  
+    subject_code <- levels(sysdimet$potilas)[i]
+    personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
+    recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+
+    pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+    fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+    palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+    
+    # Get current personal info and predictions
+  
+    curr_pk <- concinfo.df[concinfo.df$person_id == i,]$current_pk
+    curr_fppi <- concinfo.df[concinfo.df$person_id == i,]$current_fppi
+    curr_palb <- concinfo.df[concinfo.df$person_id == i,]$current_palb
+
+    pred_pk <- concinfo.df[concinfo.df$person_id == i,]$pk
+    pred_fppi <- concinfo.df[concinfo.df$person_id == i,]$fppi
+    pred_palb <- concinfo.df[concinfo.df$person_id == i,]$palb
+    
+    conc_plot1 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
+      geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = i)
+
+    conc_plot2 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+      geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = element_blank())
+    
+    conc_plot3 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
+      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+      geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+      geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+      scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+      theme_bw() +
+      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+      labs(x = element_blank(), y = element_blank())
+    
+    conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
+    
+    conc_plots[[i]] <- conc_plot
+}
+
+i <- i + 1
+
+accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",i,".rds"))
+
+# Get personal normal ranges 
+
+subject_code <- levels(sysdimet$potilas)[i]
+personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
+recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+
+pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+    
+conc_plot1 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) + 
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(x = "P-K (mmol/l)", y = i)
+
+conc_plot2 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(x = "fP-Pi (mmol/l)", y = element_blank())
+
+conc_plot3 <- ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
+  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+  geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+  geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+  scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+  labs(x = "P-Alb (mmol/l)", y = element_blank())
+
+conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
+
+conc_plots[[i]] <- conc_plot
+
+full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, persons-1),1.15))
+
+ggsave(paste0("figures/sysdimet_concentrations.pdf"), plot = full_conc_plot)
+
+```
+
+
+
+```{r result_plot}
+# Visualize the main results
+library(tibble)
+
+intake.df <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+recommendation <- colnames(intake.df)[4:(4+12)]
+
+#columns_with_icons <- c("person_id", (rbind(paste0(recommendation, "_icon"), recommendation)))
+
+cond_nutrients <- sysdimet_predictors[sysdimet_predictors$Condition >= 100,]
+table_colnames <- c("", cond_nutrients$ShortDescription)
+
+up_color <- "#F8766D"
+down_color <- "#00BFC4"
+keep_color <- "#000000"
+  
+recommendation_table.df <- intake.df %>%
+                              # Recommendation cell coloring conditional on difference from current value
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~case_when(
+                                               get(glue::glue("current_{cur_column()}")) < .x ~ up_color,
+                                               get(glue::glue("current_{cur_column()}"))  > .x ~ down_color,
+                                               get(glue::glue("current_{cur_column()}"))  == .x ~ keep_color,
+                                            ),
+                                            .names = "{.col}_color")) %>%
+                              # Cell bolding conditional on amount of the difference (30%)
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~case_when(
+                                               ((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100 < -30 ~ TRUE,
+                                               ((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100 > 30 ~ TRUE,
+                                               .default = FALSE,
+                                            ),
+                                            .names = "{.col}_bold")) %>%
+                              # Round, format and paste as multiline-string with CI
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~linebreak(paste0(
+                                              format(round(.x, cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
+                                              "\n${^{\\left[",
+                                              format(round(get(glue::glue("{cur_column()}_lCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
+                                              "; ", 
+                                              format(round(get(glue::glue("{cur_column()}_uCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                              "\\right]}}$"), 
+                                              align="c"),
+                                            .names = "{.col}")) %>%
+                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
+
+# Render PDF table and keep .tex 
+
+kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",13)), 
+   col.names = table_colnames,
+   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.") %>%
+    kable_styling(latex_options="scale_down") %>%  
+    kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+   row_spec(0,bold=TRUE) %>%
+   column_spec(2, color = recommendation_table.df[,15], bold = recommendation_table.df[,28]) %>%
+   column_spec(3, color = recommendation_table.df[,16], bold = recommendation_table.df[,29]) %>%
+   column_spec(4, color = recommendation_table.df[,17], bold = recommendation_table.df[,30]) %>%
+   column_spec(5, color = recommendation_table.df[,18], bold = recommendation_table.df[,31]) %>%
+   column_spec(6, color = recommendation_table.df[,19], bold = recommendation_table.df[,32]) %>%
+   column_spec(7, color = recommendation_table.df[,20], bold = recommendation_table.df[,33]) %>%
+   column_spec(8, color = recommendation_table.df[,21], bold = recommendation_table.df[,34]) %>%
+   column_spec(9, color = recommendation_table.df[,22], bold = recommendation_table.df[,35]) %>%
+   column_spec(10, color = recommendation_table.df[,23], bold = recommendation_table.df[,36]) %>%
+   column_spec(11, color = recommendation_table.df[,24], bold = recommendation_table.df[,37]) %>%
+   column_spec(12, color = recommendation_table.df[,25], bold = recommendation_table.df[,38]) %>%
+   column_spec(13, color = recommendation_table.df[,26], bold = recommendation_table.df[,39]) %>%
+   column_spec(14, color = recommendation_table.df[,27], bold = recommendation_table.df[,40]) %>%
+   save_kable(file = "tables/recommendations_sysdimet.pdf", keep_tex = TRUE)
+
+```
+
+
+
 
 

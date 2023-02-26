@@ -106,29 +106,43 @@ dialysis_targets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
 ```
 
 ```{r}
-dialysis_conc_predictors.df <- dialysis_predictors %>% 
-    mutate(Predictor = ifelse(Unit != "", paste0(Description, " (", Unit, ")"), Description)) %>%
-    mutate(RI = case_when(
-        is.na(Recommendation) ~ "",
-        Unit == "" ~ as.character(Recommendation),
-        Unit != "" ~ paste0(Recommendation, " (", Unit, ")")
-    )) %>%
+example_datadesc <- diet_datadesc[diet_datadesc$Dialysis==TRUE | diet_datadesc$Sysdimet==TRUE,]
+example_predictors <- example_datadesc[example_datadesc$Order==100 & example_datadesc$Condition >= 100,]
+
+example_predictors$Unit <- gsub("%","\\%",example_predictors$Unit)
+
+example_predictors.df <- example_predictors %>% 
+    mutate(Predictor = Description) %>%
     mutate(Range = case_when(
         is.na(Lowerbound) | is.na(Upperbound) ~ "",
         Unit == "" ~ paste0(Lowerbound, " - ", Upperbound),
         Unit != "" ~ paste0(Lowerbound, " - ", Upperbound, " (", Unit, ")")
     )) %>%
-    mutate(Modified = ifelse(Condition >= 100, "Yes", "No")) %>%
-    select(Predictor, RI, Range, Modified) %>%
-    arrange(desc(Modified))
+    mutate(RI = case_when(
+        is.na(Recommendation) ~ "",
+        Unit == "" ~ as.character(Recommendation),
+        Unit != "" ~ paste0(Recommendation, " (", Unit, ")")
+    )) %>%
+    mutate(Study = case_when(
+        Dialysis == TRUE & Sysdimet == TRUE ~ "In both studies",
+        Dialysis == TRUE & Sysdimet == FALSE ~ "Dialysis only",
+        Dialysis == FALSE & Sysdimet == TRUE ~ "Sysdimet only",
+    )) %>%
+    mutate(Order = case_when(
+        Study == "In both studies" ~ 1,
+        Study == "Dialysis only" ~ 2,
+        Study == "Sysdimet only" ~ 3
+    )) %>%
+    arrange(Order) %>%
+    select(Predictor, Range, RI, Study)
 
-kable(dialysis_conc_predictors.df, format = "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,
-   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.",
-   col.names = c("Predictor", "Recommendation", "Proposed Range", "Is Modified")) %>%
+kable(example_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, 
+      caption = "Nutrients that were analyzed and personalized in each of the studied examples.",
+   col.names = c("Nutrient", "Proposed Range", "General\nrecommendation", "Studied")) %>%
    kable_styling(latex_options="scale_down") %>%  
    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
-   row_spec(0,bold=TRUE)
-   #save_kable(file = "tables/predictors_dialysis.pdf", keep_tex = TRUE)
+   row_spec(0,bold=TRUE) %>%
+   save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
 
 
 ```
