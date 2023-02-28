@@ -42,6 +42,7 @@ sysdimet <- sysdimet[order(sysdimet$SUBJECT_ID, sysdimet$WEEK),]
 # Define how to iterate through the graph
 sysdimet_predictors <- sysdimet_datadesc[sysdimet_datadesc$Order==100,]    
 sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,] 
+
 ```
 
 ```{r graph, fig.height = 4, fig.width=5, echo=FALSE, fig.align = "left", fig.cap="Initial, bi-partite, network structure. The figure is plotted with iGraph package for R language (v 1.2.6, https://igraph.org/r).", echo=FALSE, message=FALSE}
@@ -202,16 +203,15 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 for (person_id in 1:37) {
 
-  #person_id <- 1
+  person_id <- 1
     
   print(paste0("Simulating patient ", person_id))
 
-  subject_code <- levels(sysdimet$potilas)[person_id]
-  treatment <- unique(sysdimet[sysdimet$potilas == subject_code,]$hoitomuoto)
-  
+  subject_code <- levels(sysdimet$SUBJECT_ID)[person_id]
+
   # Normal ranges of concentration are personalized
-  personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
-  recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+  personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
   
   #print(paste0("personal lower limits: ", as.vector(recommeded_concentrations$lower_limits)))
   #print(paste0("personal upper limits: ", as.vector(recommeded_concentrations$upper_limits)))
@@ -543,7 +543,7 @@ for (i in 1:(persons-1)) {
   
     subject_code <- levels(sysdimet$potilas)[i]
     personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
-    recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+    recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
 
     pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
     fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
@@ -605,7 +605,7 @@ accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/mv3_cross_two_lev
 
 subject_code <- levels(sysdimet$potilas)[i]
 personal_info <- head(sysdimet[sysdimet$potilas == subject_code,],1)
-recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_sysdimet = TRUE)
+recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
 
 pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
 fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])

@@ -14,7 +14,81 @@ mebn.get_mode <- function(v) {
 
 ##################################################
 
-mebn.get_personal_target_guidelines <- function(personal_info,patient_in_dialysis)
+mebn.get_personal_sysdimet_guidelines <- function(personal_info)
+{
+  # Yhteispohjoismaisen viitearvoprojektin (NORIP) mukaan aikuisten viitearvot ovat:  
+  # https://pubmed.ncbi.nlm.nih.gov/15223705/
+  
+  # fshdl:
+  # fP-HDL  
+  #   Miehet 0.8 - 2.1 mmol/l
+  #   Naiset 1.0 - 2.7 mmol/l
+  
+  # gender: female = 1, male = 0
+  if (personal_info[["sukupuoli"]] == 1)
+  {
+    lower_limits <- c(1.0)
+    upper_limits <- c(2.7)
+  } else {
+    lower_limits <- c(0.8)
+    upper_limits <- c(2.1)
+  }
+  
+  # fsldl:
+  # fP-LDL   
+  #   18-29v    1.2 - 4.3 mmol/l
+  #   30-49v    1.4 - 4.7 mmol/l
+  #   yli 50    2.0 - 5.3 mmol/l
+  
+  if (personal_info[["ika"]] < 30)
+  {
+    lower_limits <- cbind(lower_limits, 1.2)
+    upper_limits <- cbind(upper_limits, 4.3)
+  } else if (personal_info[["ika"]] < 50) {
+    lower_limits <- cbind(lower_limits, 1.4)
+    upper_limits <- cbind(upper_limits, 4.7)
+  } else {
+    # yli 50 V
+    lower_limits <- cbind(lower_limits, 2.0)
+    upper_limits <- cbind(upper_limits, 5.3)
+  }
+  
+  # fsins:
+  # S-Insu      2.6 - 25 mU/l, kaikki
+
+  lower_limits <- cbind(lower_limits, 2.6)
+  upper_limits <- cbind(upper_limits, 25)
+  
+  # fskol:
+  # fP-Kol (mmol/l)
+  #   18-29v  2.9 - 6.1 
+  #   30-49v  3.3 - 6.9 
+  #   yli 50v 3.9 - 7.8
+
+  if (personal_info[["ika"]] < 30)
+  {
+    lower_limits <- cbind(lower_limits, 2.9)
+    upper_limits <- cbind(upper_limits, 6.1)
+  } else if (personal_info[["ika"]] < 50) {
+    lower_limits <- cbind(lower_limits, 3.3)
+    upper_limits <- cbind(upper_limits, 6.9)
+  } else {
+    # yli 50 V
+    lower_limits <- cbind(lower_limits, 3.9)
+    upper_limits <- cbind(upper_limits, 7.8)
+  }
+  
+  # fpgluk:
+  # fP-Gluk
+  #   4 - 6 mmol/l, kaikki
+
+  lower_limits <- cbind(lower_limits, 4)
+  upper_limits <- cbind(upper_limits, 6)
+  
+  return(personal_limits)
+}
+
+mebn.get_personal_dialysis_guidelines <- function(personal_info,patient_in_dialysis)
 {
     #personal_info <- as.data.frame(personal_info)
     #print(personal_info)

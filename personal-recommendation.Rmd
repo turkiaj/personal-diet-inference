@@ -152,7 +152,7 @@ source("mebn/v3/MEBNv3.r")
 
 process_limits <- function(df) {
   
-  conc_limits <- mebn.get_personal_target_guidelines(df, patient_in_dialysis = TRUE)
+  conc_limits <- mebn.get_personal_dialysis_guidelines(df, patient_in_dialysis = TRUE)
   
   subject <- df[["potilas"]]
   pk_max <- conc_limits$upper_limits[1]
@@ -457,7 +457,7 @@ for (person_id in 1:37) {
   
   # Normal ranges of concentration are personalized
   personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-  recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+  recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
   
   #print(paste0("personal lower limits: ", as.vector(recommeded_concentrations$lower_limits)))
   #print(paste0("personal upper limits: ", as.vector(recommeded_concentrations$upper_limits)))
@@ -789,7 +789,7 @@ for (i in 1:(persons-1)) {
   
     subject_code <- levels(dialysis$potilas)[i]
     personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-    recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+    recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
 
     pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
     fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
@@ -851,7 +851,7 @@ accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_lev
 
 subject_code <- levels(dialysis$potilas)[i]
 personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
 
 pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
 fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
@@ -1078,7 +1078,7 @@ for (person_id in 1:37) {
   subject_code <- levels(dialysis$potilas)[person_id]
 
   personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-  recommeded_concentrations <- mebn.get_personal_target_guidelines(personal_info, patient_in_dialysis = TRUE)
+  recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
   
   # get personal graph for plotting the current intake
   personal_model_dir <- paste0(graph_dir,person_id)
