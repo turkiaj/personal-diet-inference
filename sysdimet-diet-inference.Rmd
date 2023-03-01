@@ -32,7 +32,8 @@ diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, 
 sysdimet_datadesc <- diet_datadesc[diet_datadesc$Sysdimet %in% TRUE,]
 
 # Read the actual data matching the description
-sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
+# SYSDIMET2.csv has ika (=age) included
+sysdimet <- read.csv(file="data/SYSDIMET2.csv", sep=";", dec=",")
 
 sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
 sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
@@ -174,7 +175,7 @@ library(gridExtra)
 simulation <- "X50_B50_A50_I50"
 
 # - data parameters
-graph_dir <- "graphs/sysdimet/mv3_cross_two_levels/"
+graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
 
 datadesc <- sysdimet_datadesc
 
@@ -196,14 +197,18 @@ upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$N
 # generally recommended intake (RI)
 RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
+# use middle of the lower and upperbounds as recommended level, if it has not been set
+boundmids <- (lowerbounds + upperbounds)/2
+RI[is.na(RI)] <- sapply(names(RI[is.na(RI)]), function(x) boundmids[[x]])
+
 # - collect personal statistics in this data frame
 patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow(assumedtargets) * 3, nrow = 0), row.names = NULL)
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:37) {
+for (person_id in 2:2) {
 
-  person_id <- 1
+  #person_id <- 1
     
   print(paste0("Simulating patient ", person_id))
 
@@ -221,8 +226,6 @@ for (person_id in 1:37) {
 
   # Sample diet proposals and matching concentration predictions
   
-  #source("mebn/v3/MEBNv3.r")
-
   intake_model <- mebn.Query(reaction_graph = personal_graph,
                            graph_dir = personal_model_dir,
                            queried_nodes = queried_nodes,
@@ -230,7 +233,7 @@ for (person_id in 1:37) {
                            proposal_lowerlimits = lowerbounds,
                            proposal_upperlimits = upperbounds,
                            general_RI = RI,
-                           stan_model_file = "diet/recommendation_with_utility_invlogit.stan",
+                           stan_model_file = "diet/recommendation_with_utility.stan",
                            conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
                            conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
                            beta_point_est = "mean",
@@ -242,14 +245,16 @@ for (person_id in 1:37) {
   # Extract all the samples and correlate concentrations and intake with proposal ids
   result <- rstan::extract(intake_model)
 
-  pk <- result$concentration[,,1]
-  fppi <- result$concentration[,,2]
-  palb <- result$concentration[,,3]
+  fshdl <- result$concentration[,,1]
+  fsldl <- result$concentration[,,2]
+  fsins <- result$concentration[,,3]
+  fskol <- result$concentration[,,4]
+  fpgluk <- result$concentration[,,5]
   
-  proposals <- 1:dim(pk)[1]
-  proposal_samples <- 1:dim(pk)[2]
+  proposals <- 1:dim(fshdl)[1]
+  proposal_samples <- 1:dim(fshdl)[2]
 
-  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), pk=as.vector(t(pk)),fppi=as.vector(t(fppi)),palb=as.vector(t(palb)))
+  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)), fsins=as.vector(t(fsins)), fskol=as.vector(t(fskol)), fpgluk=as.vector(t(fpgluk)))
   
   # Get the original scale levels of potassium and potassium from each diet proposal
   intake_proposals.df <- data.frame(proposal=proposals)
@@ -268,22 +273,28 @@ for (person_id in 1:37) {
   #  Calculate probability of each proposal being within the recommended concentration limits.
   #  The calculation is done based on empirical cumulative distribution function (ecdf) for each concentration distribution. 
   
-  pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-  fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-  palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+  fshdl_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+  fsldl_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+  fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+  fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
+  fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
 
   proposal_probs.df <- concs.df %>%
-  select(proposal,pk,fppi,palb) %>%
+  select(proposal,fshdl,fsldl,fsins,fskol,fpgluk) %>%
   group_by(proposal) %>%
   summarise(
-    pk_mu = mean(pk),
-    fppi_mu = mean(fppi),
-    palb_mu = mean(palb),
-    pk_prob = (ecdf(pk)(pk_recommendations[2]) - ecdf(pk)(pk_recommendations[1])),
-    fppi_prob = (ecdf(fppi)(fppi_recommendations[2]) - ecdf(fppi)(fppi_recommendations[1])),
-    palb_prob = (ecdf(palb)(palb_recommendations[2]) - ecdf(palb)(palb_recommendations[1])),
-    lowest_conc_prob = min(pk_prob, fppi_prob, palb_prob),
-    iid_prob = pk_prob * fppi_prob * palb_prob,
+    fshdl_mu = mean(fshdl),
+    fsldl_mu = mean(fsldl),
+    fsins_mu = mean(fsins),
+    fskol_mu = mean(fskol),
+    fpgluk_mu = mean(fpgluk),
+    fshdl_prob = (ecdf(fshdl)(fshdl_recommendations[2]) - ecdf(fshdl)(fshdl_recommendations[1])),
+    fsldl_prob = (ecdf(fsldl)(fsldl_recommendations[2]) - ecdf(fsldl)(fsldl_recommendations[1])),
+    fsins_prob = (ecdf(fsins)(fsins_recommendations[2]) - ecdf(fsins)(fsins_recommendations[1])),
+    fskol_prob = (ecdf(fskol)(fskol_recommendations[2]) - ecdf(fskol)(fskol_recommendations[1])),
+    fpgluk_prob = (ecdf(fpgluk)(fpgluk_recommendations[2]) - ecdf(fpgluk)(fpgluk_recommendations[1])),
+    lowest_conc_prob = min(fshdl_prob, fsldl_prob, fsins_prob, fskol_prob, fpgluk_prob),
+    iid_prob = fshdl_prob * fsldl_prob * fsins_prob * fskol_prob * fpgluk_prob,
   )
   
   # Join intake and resulting concentrations
@@ -297,7 +308,7 @@ for (person_id in 1:37) {
   # - Do we have any accepted proposals?
   if (nrow(accepted_intake.df) > 0)
   {
-    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
     recommandation_probability <- 0.90
       
@@ -306,7 +317,7 @@ for (person_id in 1:37) {
       filter(lowest_conc_prob >= recommandation_probability) %>%
       as.data.frame()
 
-    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
     print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
@@ -339,44 +350,49 @@ for (person_id in 1:37) {
 
     patient_summary <- rbind(patient_summary, personal_intake)
   }
-  
-  # plotting
-  
-  if (FALSE) {
-    
-    conc_plot1 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=pk_mu, color=lowest_conc_prob)) +
-      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    conc_plot2 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=fppi_mu, color=lowest_conc_prob)) +
-      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    conc_plot3 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=palb_mu, color=lowest_conc_prob)) +
-      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    lay <- rbind(c(1),
-                 c(2),
-                 c(3))
-    
-    lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
-    
-    ggsave(paste0("figures/sysdimet/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
-
-  }
-
 }
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 
+```
+
+```{r inference_debug}
+    conc_plot1 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fshdl_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot2 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fsldl_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    conc_plot3 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fsins_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+    conc_plot4 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fskol_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+    conc_plot5 <- ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=fpgluk_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+    
+    lay <- rbind(c(1),
+                 c(2),
+                 c(3),
+                 c(4),
+                 c(5))
+    
+    lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 ```
 
 
@@ -388,13 +404,15 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/s
   source("mebn/v3/MEBNv3.r")
 
   queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
-  patient_summary <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+  patient_summary <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary.rds")
 
   for (subject_id in 1:37) {
     
+    subject_id <- 1
+    
     print(subject_id)
 
-    graph_dir <- paste0("graphs/sysdimet/mv3_cross_two_levels/",subject_id)
+    graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",subject_id)
     reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
     
     org_stats <- data.frame(name = subset(sysdimet_predictors$Name, sysdimet_predictors$Distribution == "Gaussian"))
@@ -415,40 +433,56 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/s
     Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
     Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
     
-    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
-    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
-    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    fshdl_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fsldl_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    fsins_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    fskol_mu <- params$intercept_point[4] + params$X_evidence_point %*% params$X_beta_point[4,] + Q_values_norm %*% params$Q_beta_point[4,]
+    fpgluk_mu <- params$intercept_point[5] + params$X_evidence_point %*% params$X_beta_point[5,] + Q_values_norm %*% params$Q_beta_point[5,]
     
-    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
+    resulting_conc_mu <- c(fshdl_mu,fsldl_mu,fsins_mu,fskol_mu,fpgluk_mu)
   
     quant_limit <- 0.9
-    pk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
-    pk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+    fshdl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
+    fshdl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
 
-    fppi_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
-    fppi_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+    fsldl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
+    fsldl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
 
-    palb_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
-    palb_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+    fsins_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
+    fsins_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
 
-    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
-    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
+    fskol_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
+    fskol_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
+
+    fpgluk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
+    fpgluk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
+
+    resulting_conc_mu_lCI <- c(fshdl_mu_lCI,fsldl_mu_lCI,fsins_mu_lCI,fskol_mu_lCI,fpgluk_mu_lCI)
+    resulting_conc_mu_uCI <- c(fshdl_mu_uCI,fsldl_mu_uCI,fsins_mu_uCI,fskol_mu_uCI,fpgluk_mu_uCI)
     
-    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
-    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl <- fshdl_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl_lCI <- fshdl_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl_uCI <- fshdl_mu_uCI
   
-    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl <- fsldl_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl_lCI <- fsldl_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl_uCI <- fsldl_mu_uCI
   
-    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
-    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsins <- fsins_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fsins_lCI <- fsins_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsins_uCI <- fsins_mu_uCI
+
+    patient_summary[patient_summary$person_id == subject_id,]$fskol <- fskol_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fskol_lCI <- fskol_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fskol_uCI <- fskol_mu_uCI
+
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk <- fpgluk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_lCI <- fpgluk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_uCI <- fpgluk_mu_uCI
     
   }
   
-  saveRDS(patient_summary, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
+  saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
 
 ```
 
@@ -463,7 +497,7 @@ current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(sys
 
 for (person_id in 1:37) {
 
-  graph_dir <- paste0("graphs/sysdimet/mv3_cross_two_levels/",person_id)
+  graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",person_id)
   personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
   
   # Current intake levels
@@ -503,14 +537,14 @@ colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), p
 
 # Join recommendations with current situation
 
-recommendation_with_concpreds.df <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds")
+recommendation_with_concpreds.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds")
 
 recommendation_with_concpreds_and_current.df <- recommendation_with_concpreds.df %>% inner_join(current_diet.df, by="person_id")
 
 # Convert all columns as numerics
 recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendation_with_concpreds_and_current.df, as.numeric))
 
-saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
+saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
 
 ```
 
@@ -519,7 +553,7 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sy
 library(ggplot2)
 library(gridExtra)
 
-concinfo.df <- readRDS("patient_summary/sysdimet/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+concinfo.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
 
 persons <- 7
 

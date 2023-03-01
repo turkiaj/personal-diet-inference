@@ -85,6 +85,11 @@ mebn.get_personal_sysdimet_guidelines <- function(personal_info)
   lower_limits <- cbind(lower_limits, 4)
   upper_limits <- cbind(upper_limits, 6)
   
+  personal_limits <- within(list(), {
+    lower_limits <- lower_limits
+    upper_limits <- upper_limits
+  })
+  
   return(personal_limits)
 }
 
@@ -3860,7 +3865,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   rstan_options (auto_write=TRUE)
   options (mc.cores=parallel::detectCores ())
   
-  query_result <- stan(file=stan_model_file, warmup = 1000, iter=3000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
+  query_result <- stan(file=stan_model_file, warmup = 1000, iter=2000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
 
   #m <- stan_model(file=stan_model_file)
   #query_result <- optimizing(m, data=params, seed=483892929, verbose=TRUE, init = 0)

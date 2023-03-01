@@ -1,34 +1,36 @@
 functions {
   
+  // This function defines a custom probability distribution that receives 
+  // its maximum value when the current diet proposal is closest to most preferred diet
   real diet_preference(vector Q, vector RI, int r, real preference_strength) {
 
-    // this preference function aims to minimize the sum of squares between personal recommendations (Q) and current levels of Q
+    // This function prefers such a personal diet proposal that is closest to person's current diet
+    // and it is achieven by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
     
     vector[r] diffs = Q - RI;
     real sum_of_errors = sum(fabs(diffs));
     
-    // - exponential function integrates to 1 when integrated from 0 to infinity like probability distributions
-    // - negating the sum of errors makes function to increase as error decreases
-    
-    return exp(-preference_strength * sum_of_errors);
+    return exponential_lpdf(sum_of_errors | preference_strength);
   }
   
 }
 
 data {
-    int<lower=1> responses;    // number of responses
-    int<lower=1> p;            // number of predictors
-    int<lower=0> r;            // number of conditioned predictors
+    int<lower=1> responses;        // number of responses
+    int<lower=1> p;                // number of predictors
+    int<lower=0> r;                // number of conditioned predictors
     vector[r] proposal_lowerlimits; // limits of proposals   
     vector[r] proposal_upperlimits; // limits of proposals   
-    vector[r] general_RI;        // general intake recommendation for calculating the utility
-    vector[r] current_Q;       // current personal intake level for calculating the utility 
+    vector[r] general_RI;        // general intake recommendation for calculating the preference function
+    vector[r] current_Q;         // current personal intake level for calculating the preference function 
     real Y_lower_limits[responses];        // lower limits of concentrations
     real Y_upper_limits[responses];        // upper limits of concentrations      
 
-    int posterior_samples;     // number of samples to draw from predicted concentration distrubution
+    int posterior_samples;      // number of samples to draw from predicted concentration distrubution
 
     // point estimates from parameter posteriors (CI5%, CI95%, median..)
+    // - these point estimates are used instead of full posterior distributions for 
+    // making the proposed intake distributions Q more concise
     real intercept_point[responses];     
     real alpha_point[responses];         
     vector[p] X_beta_point[responses];   
@@ -45,6 +47,7 @@ data {
 transformed data {
 
   // Estimated value of concentration without the queried predictors (mu_q0)
+  // This part of the expected value (mu) does not change during the sampling
   real mu_q0[responses];
 
   real Y_lower_trans[responses];
@@ -53,61 +56,59 @@ transformed data {
   for (m in 1:responses) {
     mu_q0[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
     Y_lower_trans[m] = Y_lower_limits[m] + linear_transformation;
-    Y_upper_trans[m] = Y_upper_limits[m] * 1.5 + linear_transformation;
+    Y_upper_trans[m] = Y_upper_limits[m] + linear_transformation;
   } 
 }
 
 parameters {
  
+  // Resulting parameters of this inference are these personal recommendations for intake proposals Q
+  // Each nutrient Q is given lower and upperlimits for its recommendation
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
-  
+
 }
 
 transformed parameters {
 
+  real in_concentration_range;
   real preference;
+  real Y_mu[responses];
+  real softbound_sum = 0;
 
-  real pk_mu; 
-  real fppi_mu;
-  real palb_mu;
-
-  pk_mu = mu_q0[1] + dot_product(Q, Q_beta_point[1]) + linear_transformation;
-  fppi_mu = mu_q0[2] + dot_product(Q, Q_beta_point[2]) + linear_transformation;
-  palb_mu = mu_q0[3] + dot_product(Q, Q_beta_point[3]) + linear_transformation;
+  for (m in 1:responses) {
+    Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]) + linear_transformation;
+  }
   
-  preference = log(diet_preference(Q, current_Q, r, preference_strength));
+  // Probability of reaching the concentrations limits
+  {
+    real steepness = 100;
+
+    for (m in 1:responses) {
+      softbound_sum += inv_logit((Y_mu[m] - Y_lower_trans[m]) * steepness);
+      softbound_sum += inv_logit((Y_upper_trans[m] - Y_mu[m]) * steepness);
+    }
+
+    in_concentration_range = exponential_lpdf(2*responses - softbound_sum | 100);
+  }
+  
+  // Preference is published as parameter for visualization
+  // - diet_preference returns lpdf_exponential()
+  preference = diet_preference(Q, current_Q, r, preference_strength);
 }
 
 model {
-  
-  // priors for nutrients
-  
+
   for (i in 1:r) {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
-
-  // soft limits for concentrations 
   
-  target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_lower_trans[1]);
-  target += gamma_lpdf(pk_mu | alpha_point[1],  alpha_point[1] / Y_upper_trans[1]);
-
-  //target += normal_lpdf(pk_mu | (Y_upper_trans[1]-Y_lower_trans[1]) / 2, 100);
-
-  target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_lower_trans[2]);
-  target += gamma_lpdf(fppi_mu | alpha_point[2],  alpha_point[2] / Y_upper_trans[2]);
-
-  //target += normal_lpdf(fppi_mu | (Y_upper_trans[2]-Y_lower_trans[2]) / 2, 100);
-
-  target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_lower_trans[3]);
-  target += gamma_lpdf(palb_mu | alpha_point[3],  alpha_point[3] / Y_upper_trans[3]);
-
-  //target += normal_lpdf(palb_mu | (Y_upper_trans[3]-Y_lower_trans[3]) / 2, 100);
-
-  // select preferred diet from all the equal options
-
-  target += preference;
-
-  //print("target: ", target());
+  {
+    // probability of being inside the concentration normal ranges
+    target += in_concentration_range;
+    
+    // diet preference conditionally on being inside the concentration limits
+    target += preference;
+  }
 
 }
 

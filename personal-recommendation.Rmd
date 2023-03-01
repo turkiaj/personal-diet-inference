@@ -446,7 +446,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:37) {
+for (person_id in 1:1) {
 
   #person_id <- 1
     
@@ -476,7 +476,7 @@ for (person_id in 1:37) {
                            proposal_lowerlimits = lowerbounds,
                            proposal_upperlimits = upperbounds,
                            general_RI = RI,
-                           stan_model_file = "diet/recommendation_with_utility_invlogit.stan",
+                           stan_model_file = "diet/recommendation_with_utility.stan",
                            conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
                            conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
                            beta_point_est = "mean",
