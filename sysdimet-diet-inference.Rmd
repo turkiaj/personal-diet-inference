@@ -31,14 +31,35 @@ diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, 
 
 sysdimet_datadesc <- diet_datadesc[diet_datadesc$Sysdimet %in% TRUE,]
 
-# Read the actual data matching the description
-# SYSDIMET2.csv has ika (=age) included
-sysdimet <- read.csv(file="data/SYSDIMET2.csv", sep=";", dec=",")
+# Data preprocessing
+
+# sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
+# 
+# sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
+# sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
+# 
+# sysdimet_ika <- read.csv(file="data/SYSDIMET_ika.csv", sep=";", dec=",")
+# sysdimet_ika <- unique(sysdimet_ika)
+# sysdimet_ika$SUBJECT_ID <- factor(sysdimet_ika$SUBJECT_ID)
+# sysdimet2 <- sysdimet %>% inner_join(sysdimet_ika, by="SUBJECT_ID")
+# 
+# sysdimet2$energiakj <- sysdimet2$energia # Sysdimet-artikkelin mukaan energia on kilojouleina
+# 
+# sysdimet2$mufaepros <- sysdimet2$mufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+# sysdimet2$pufaepros <- sysdimet2$pufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+# sysdimet2$safaepros <- sysdimet2$safa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+# sysdimet2$hhepros <- sysdimet2$hhydr * 17 / sysdimet2$energiakj * 100 # Hiilihydraatin energiakerroin on 17 kJ/g (4 kcal/g)
+# sysdimet2$protepros <- sysdimet2$prot * 17 / sysdimet2$energiakj * 100 # Proteiinin energiakerroin on 17 kJ/g (4 kcal/g)
+# sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
+# 
+# sysdimet2 <- sysdimet2[order(sysdimet2$SUBJECT_ID, sysdimet2$WEEK),]
+# 
+# write.csv2(sysdimet2, "data/SYSDIMET_epros.csv", row.names = FALSE)
+
+sysdimet <- read.csv(file="data/SYSDIMET_epros.csv", sep=";", dec=",")
 
 sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
 sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
-
-sysdimet <- sysdimet[order(sysdimet$SUBJECT_ID, sysdimet$WEEK),]
 
 # Define how to iterate through the graph
 sysdimet_predictors <- sysdimet_datadesc[sysdimet_datadesc$Order==100,]    
@@ -189,6 +210,7 @@ org_stats$mean <- sapply(org_stats$name, function(x) mean(sysdimet[[x]]))
 org_stats$sd <- sapply(org_stats$name, function(x) sd(sysdimet[[x]]))
 
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
+c(datadesc[datadesc$Condition >= 100,]$Lowerbound, datadesc[datadesc$Condition >= 100,]$Upperbound)
 
 # intake bounds and RI are normalized
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
@@ -206,9 +228,11 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 2:2) {
+#source("mebn/v3/MEBNv3.r")
 
-  #person_id <- 1
+for (person_id in 1:1) {
+
+  person_id <- 15
     
   print(paste0("Simulating patient ", person_id))
 
@@ -241,6 +265,9 @@ for (person_id in 2:2) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0)
+
+  #params <- readRDS("last_params.rds")
+  #params
   
   # Extract all the samples and correlate concentrations and intake with proposal ids
   result <- rstan::extract(intake_model)
@@ -360,29 +387,29 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 
 ```
 
-```{r inference_debug}
+```{r fig.height=8, inference_debug}
     conc_plot1 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fshdl_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_point(aes(y=lp, x=fshdl_mu, color=preference), show.legend=TRUE) +
       geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
     conc_plot2 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fsldl_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_point(aes(y=lp, x=fsldl_mu, color=preference), show.legend=FALSE) +
       geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
     conc_plot3 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fsins_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_point(aes(y=lp, x=fsins_mu, color=preference), show.legend=FALSE) +
       geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
     conc_plot4 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fskol_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_point(aes(y=lp, x=fskol_mu, color=preference), show.legend=FALSE) +
       geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
     conc_plot5 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fpgluk_mu, color=lowest_conc_prob), show.legend=FALSE) +
+      geom_point(aes(y=lp, x=fpgluk_mu, color=preference), show.legend=FALSE) +
       geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     

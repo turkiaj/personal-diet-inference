@@ -3857,10 +3857,13 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Q_beta_point <- Q_beta_point
                      linear_transformation <- offset_value
                      
-                     preference_strength <- 2;
+                     preference_strength <- 2
+                     bound_steepness <- 100
                      
                      posterior_samples <- posterior_samples
                    })
+  
+  #saveRDS(params, "last_params.rds")
   
   rstan_options (auto_write=TRUE)
   options (mc.cores=parallel::detectCores ())

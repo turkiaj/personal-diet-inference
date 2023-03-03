@@ -42,6 +42,8 @@ data {
     
     real preference_strength;
     real linear_transformation;
+    
+    real bound_steepness;
 }
 
 transformed data {
@@ -75,22 +77,17 @@ transformed parameters {
   real Y_mu[responses];
   real softbound_sum = 0;
 
+  // Probability of reaching the concentrations limits
   for (m in 1:responses) {
     Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]) + linear_transformation;
+    
+    softbound_sum += inv_logit((Y_mu[m] - Y_lower_trans[m]) * bound_steepness);
+    softbound_sum += inv_logit((Y_upper_trans[m] - Y_mu[m]) * bound_steepness);
   }
-  
-  // Probability of reaching the concentrations limits
-  {
-    real steepness = 100;
 
-    for (m in 1:responses) {
-      softbound_sum += inv_logit((Y_mu[m] - Y_lower_trans[m]) * steepness);
-      softbound_sum += inv_logit((Y_upper_trans[m] - Y_mu[m]) * steepness);
-    }
+  // we prefer strongly that all the bounds are met with lambda = 100
+  in_concentration_range = exponential_lpdf(2*responses - softbound_sum | 100);
 
-    in_concentration_range = exponential_lpdf(2*responses - softbound_sum | 100);
-  }
-  
   // Preference is published as parameter for visualization
   // - diet_preference returns lpdf_exponential()
   preference = diet_preference(Q, current_Q, r, preference_strength);

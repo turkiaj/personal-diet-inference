@@ -109,19 +109,37 @@ dialysis_targets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
 example_datadesc <- diet_datadesc[diet_datadesc$Dialysis==TRUE | diet_datadesc$Sysdimet==TRUE,]
 example_predictors <- example_datadesc[example_datadesc$Order==100 & example_datadesc$Condition >= 100,]
 
+# Mean and SD for dialysis data
+example_predictors$dialysis_mean <- 0
+example_predictors$dialysis_sd <- 0
+
+example_predictors[example_predictors$Dialysis==TRUE,]$dialysis_mean <- sapply(example_predictors[example_predictors$Dialysis==TRUE,]$Name, function(x) format(round(mean(dialysis[[x]]), example_predictors[example_predictors$Name==x,]$Decimals), nsmall=example_predictors[example_predictors$Name==x,]$Decimals))
+example_predictors[example_predictors$Dialysis==TRUE,]$dialysis_sd <- sapply(example_predictors[example_predictors$Dialysis==TRUE,]$Name, function(x) format(round(sd(dialysis[[x]]), example_predictors[example_predictors$Name==x,]$Decimals), nsmall=example_predictors[example_predictors$Name==x,]$Decimals))
+
+# Mean and SD for sysdimet data
+
+sysdimet <- read.csv(file="data/SYSDIMET_epros.csv", sep=";", dec=",")
+
+example_predictors$sysdimet_mean <- 0
+example_predictors$sysdimet_sd <- 0
+
+example_predictors[example_predictors$Sysdimet==TRUE,]$sysdimet_mean <- sapply(example_predictors[example_predictors$Sysdimet==TRUE,]$Name, function(x) format(round(mean(sysdimet[[x]]), example_predictors[example_predictors$Name==x,]$Decimals), nsmall=example_predictors[example_predictors$Name==x,]$Decimals))
+
+example_predictors[example_predictors$Sysdimet==TRUE,]$sysdimet_sd <- sapply(example_predictors[example_predictors$Sysdimet==TRUE,]$Name, function(x) format(round(sd(sysdimet[[x]]), example_predictors[example_predictors$Name==x,]$Decimals), nsmall=example_predictors[example_predictors$Name==x,]$Decimals))
+
 example_predictors$Unit <- gsub("%","\\%",example_predictors$Unit)
 
 example_predictors.df <- example_predictors %>% 
-    mutate(Predictor = Description) %>%
+    mutate(Predictor = paste0(Description, " (", Unit, ")")) %>%
     mutate(Range = case_when(
         is.na(Lowerbound) | is.na(Upperbound) ~ "",
         Unit == "" ~ paste0(Lowerbound, " - ", Upperbound),
-        Unit != "" ~ paste0(Lowerbound, " - ", Upperbound, " (", Unit, ")")
+        Unit != "" ~ paste0(Lowerbound, " - ", Upperbound)
     )) %>%
     mutate(RI = case_when(
         is.na(Recommendation) ~ "",
         Unit == "" ~ as.character(Recommendation),
-        Unit != "" ~ paste0(Recommendation, " (", Unit, ")")
+        Unit != "" ~ as.character(Recommendation)
     )) %>%
     mutate(Study = case_when(
         Dialysis == TRUE & Sysdimet == TRUE ~ "In both studies",
@@ -133,17 +151,19 @@ example_predictors.df <- example_predictors %>%
         Study == "Dialysis only" ~ 2,
         Study == "Sysdimet only" ~ 3
     )) %>%
+    mutate(Sysdimet = ifelse(sysdimet_mean > 0, paste0(sysdimet_mean, "\\pm", sysdimet_sd), "-")) %>%
+    mutate(Dialysis = ifelse(dialysis_mean > 0, paste0(dialysis_mean, "\\pm", dialysis_sd), "-")) %>%
     arrange(Order) %>%
-    select(Predictor, Range, RI, Study)
+    select(Predictor, Range, RI, Sysdimet, Dialysis)
 
 kable(example_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, 
       caption = "Nutrients that were analyzed and personalized in each of the studied examples.",
-   col.names = c("Nutrient", "Proposed Range", "General\nrecommendation", "Studied")) %>%
+   col.names = c("Nutrient", "Proposed range", "Recommendation", "Sysdimet", "Dialysis")) %>%
+   add_header_above(c("", "General" = 2, "Study mean \\pmSD" = 2)) %>%
    kable_styling(latex_options="scale_down") %>%  
    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
    row_spec(0,bold=TRUE) %>%
    save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
-
 
 ```
 
@@ -375,10 +395,6 @@ org_stats <- data.frame(name = subset(assumedpredictors$Name, assumedpredictors$
 org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
 org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
 
-demodialysis[7:19]
-
-org_stats
-
 norm_predictors <- sapply(assumedpredictors$Name, function(x) (as.numeric(demodialysis[x]) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
 write.csv2(demodialysis, file="patient_summary/dialysisdiet.csv", row.names = FALSE)
@@ -434,7 +450,7 @@ org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
 
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 
-# intake bounds and RI are normalized
+# intake bounds and RI are normalized to dialysis dataset
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Upperbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
@@ -543,7 +559,7 @@ for (person_id in 1:1) {
   # - Do we have any accepted proposals?
   if (nrow(accepted_intake.df) > 0)
   {
-    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+    #saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
     recommandation_probability <- 0.90
       
@@ -552,7 +568,7 @@ for (person_id in 1:1) {
       filter(lowest_conc_prob >= recommandation_probability) %>%
       as.data.frame()
 
-    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+    #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
     print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
@@ -588,20 +604,20 @@ for (person_id in 1:1) {
   
   # plotting
   
-  if (FALSE) {
+  if (TRUE) {
     
     conc_plot1 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=pk_mu, color=lowest_conc_prob)) +
+      geom_point(aes(y=lp, x=pk_mu, color=preference)) +
       geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
     conc_plot2 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=fppi_mu, color=lowest_conc_prob)) +
+      geom_point(aes(y=lp, x=fppi_mu, color=preference)) +
       geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
     conc_plot3 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=palb_mu, color=lowest_conc_prob)) +
+      geom_point(aes(y=lp, x=palb_mu, color=preference)) +
       geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
@@ -611,7 +627,7 @@ for (person_id in 1:1) {
     
     lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
     
-    ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+    #ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
   }
 
@@ -619,7 +635,7 @@ for (person_id in 1:1) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 
