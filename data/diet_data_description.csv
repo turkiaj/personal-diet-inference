@@ -33,7 +33,8 @@ pferrit;Ferritiini;Ferritin;Ferritin;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 fptransf;fP-Transf;fP-Transf;fP-Transf;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 crp;CRP;CRP;CRP;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 pna;P-Na;P-Na;P-Na;10;0;;;;;0;Gaussian;0;FALSE;FALSE;0
-sakkaroosi;Sakkaroosi;Sucrose;Sucrose;g/d;100;0;10;2;0;10;Gaussian;2;TRUE;TRUE;113
+sakkaroosi;Sakkaroosi;Sucrose;Sucrose;g/d;0;0;10;2;0;10;Gaussian;2;TRUE;TRUE;0
+sakkaroosiepros;Sakkaroosi;Sucrose;Sucrose;E%;100;0;10;2;0;10;Gaussian;2;TRUE;TRUE;113
 protepros;Proteiini E%;Protein;Protein;E%;100;10,0;20,0;15,0;0,0;40,0;Gaussian;1;TRUE;TRUE;100
 pkrea;P-Krea;P-Krea;P-Krea;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 urea1;Urea1;Urea1;Urea1;;0;;;;;;Gaussian;0;FALSE;FALSE;0
@@ -77,15 +78,17 @@ pk;P-K;P-K;P-K;mmol/l;200;;;;0;10;Gaussian;0;TRUE;FALSE;0
 fppi;fP-Pi;fP-Pi;fP-Pi;mmol/l;200;;;;0;10;Gaussian;0;TRUE;FALSE;0
 palb;P-Alb;P-Alb;P-Alb;g/l;200;;;;;;Gaussian;0;TRUE;FALSE;0
 kolestrolilaakitys;kolestrolilaakitys;Chol. medication;Chol. medication;;100;;;;;;Bernoulli;0;FALSE;TRUE;0
-rasva;rasva;Fat;Linoleic acid;mg/d;100;2000;1200;2300;2000;;Gaussian;;FALSE;FALSE;101
-safa;safa;Saturated Fatty Acids;SAFA;pmol/l;0;7,63;5;;;;Gaussian;;FALSE;FALSE;102
-mufa;mufa;Monounsaturated Fatty Acids;MUFA;pmol/l;0;8,1;5;;;;Gaussian;;FALSE;FALSE;103
-pufa;pufa;Polyunsaturated Fatty Acids;PUFA;pmol/l;0;4,9;5;;;;Gaussian;;FALSE;FALSE;104
-linoli;linoli;Linoleic acid;Linoleic acid;mg/d;100;2,5;9;;;;Gaussian;2;FALSE;TRUE;105
-linoleeni;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;mg/d;100;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;106
+rasva;rasva;Fat;Fat;mg/d;100;2000;1200;2300;2000;;Gaussian;;FALSE;FALSE;0
+safa;safa;Saturated Fatty Acids;SAFA;pmol/l;0;7,63;5;;;;Gaussian;;FALSE;FALSE;0
+mufa;mufa;Monounsaturated Fatty Acids;MUFA;pmol/l;0;8,1;5;;;;Gaussian;;FALSE;FALSE;0
+pufa;pufa;Polyunsaturated Fatty Acids;PUFA;pmol/l;0;4,9;5;;;;Gaussian;;FALSE;FALSE;0
+linoli;linoli;Linoleic acid;Linoleic acid;g/d;100;2,5;9;;;;Gaussian;2;FALSE;TRUE;0
+linoliepros;linoliepros;Linoleic acid;Linoleic acid;E%;100;2,5;9;;;;Gaussian;2;FALSE;TRUE;105
+linoleeni;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;g/d;100;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;0
+linoleeniepros;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;E%;100;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;106
 kol;Kolestroli;Cholesterol;Cholesterol;mg/d;100;0,0;300,0;;;;Gaussian;0;FALSE;TRUE;107
-sellul;Selluloosa;Cellulose;HDL-chol.;;100;;;;;;Gaussian;2;FALSE;FALSE;111
-ligniini;Ligniini;Lignin;LDL-chol.;;100;;;;;;Gaussian;2;FALSE;FALSE;112
+sellul;Selluloosa;Cellulose;Cellulose;;100;;;;;;Gaussian;2;FALSE;FALSE;111
+ligniini;Ligniini;Lignin;Lignin;;100;;;;;;Gaussian;2;FALSE;FALSE;112
 alkoholi;Alkoholi;Alcohol;Insulin;;100;;;;;;Gaussian;2;FALSE;FALSE;113
 foolih;Foolihappo;Folic acid;Folic acid;ug/d;100;100;1000;300;;;Gaussian;2;FALSE;TRUE;115
 cvit;C-vit.;Vitamin C;Vitamin C;mg/d;100;10;1000;75;;;Gaussian;2;FALSE;TRUE;116

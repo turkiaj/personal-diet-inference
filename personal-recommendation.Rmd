@@ -63,6 +63,8 @@ dialysis$mufaepros <- dialysis$mufa * 9 / dialysis$energiakcal * 100 # Rasvan en
 dialysis$pufaepros <- dialysis$pufa * 9 / dialysis$energiakcal * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
 # dialysis$safaepros already exists in data
 
+dialysis$sakkaroosiepros <- dialysis$sakkaroosi * 4 / dialysis$energiakcal * 100 # Sakkaroosin energia-arvo on 17 kJ/g (4 kcal/g)
+
 # gender: female = 1, male = 0
 # already done
 #dialysis$sukupuoli <- factor(ifelse(dialysis$sukupuoli == "nainen", 1, 0))
@@ -156,14 +158,14 @@ example_predictors.df <- example_predictors %>%
     arrange(Order) %>%
     select(Predictor, Range, RI, Sysdimet, Dialysis)
 
-kable(example_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, 
+kable(example_predictors.df, format = "html", escape = F, booktabs = T, row.names = FALSE, 
       caption = "Nutrients that were analyzed and personalized in each of the studied examples.",
    col.names = c("Nutrient", "Proposed range", "Recommendation", "Sysdimet", "Dialysis")) %>%
    add_header_above(c("", "General" = 2, "Study mean \\pmSD" = 2)) %>%
    kable_styling(latex_options="scale_down") %>%  
    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
-   row_spec(0,bold=TRUE) %>%
-   save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
+   row_spec(0,bold=TRUE) 
+#   save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
 
 ```
 
@@ -236,7 +238,7 @@ ggraph(initial_graph, layout = bipa_layout) +
 https://cran.r-project.org/web/packages/ggparty/vignettes/ggparty-graphic-partying.html
 
 ```{r graph_with_gamma_qr_mvcross_two_levels, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
-no_holdout <- rep(0, nrow(dialysis_imputed))
+no_holdout <- rep(0, nrow(dialysis))
 
 initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
 
@@ -244,7 +246,7 @@ initial_graph <- mebn.fully_connected_bipartite_graph(dialysis_datadesc)
 dialysis$hoitoryhma <- as.factor(dialysis$hoitomuoto)
 
 # and sort the data by treatment/patient/observation
-dialysis <- dialysis[order(dialysis_$hoitoryhma, 
+dialysis <- dialysis[order(dialysis$hoitoryhma, 
                                            dialysis$potilas, dialysis$havainto),]
 
 dialdiet_gamma_mv3_two_level <- mebn.bipartite_two_level_multivariate(
@@ -518,6 +520,7 @@ for (person_id in 1:1) {
 
   intake_proposals.df$lp <- result$lp__
   intake_proposals.df$u <- result$preference
+  intake_proposals.df$bs <- result$softbound_sum
   
   for (node_index in 1:length(queried_nodes)) {
     node_name <- queried_nodes[[node_index]]

@@ -33,28 +33,36 @@ sysdimet_datadesc <- diet_datadesc[diet_datadesc$Sysdimet %in% TRUE,]
 
 # Data preprocessing
 
-# sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
-# 
-# sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
-# sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
-# 
-# sysdimet_ika <- read.csv(file="data/SYSDIMET_ika.csv", sep=";", dec=",")
-# sysdimet_ika <- unique(sysdimet_ika)
-# sysdimet_ika$SUBJECT_ID <- factor(sysdimet_ika$SUBJECT_ID)
-# sysdimet2 <- sysdimet %>% inner_join(sysdimet_ika, by="SUBJECT_ID")
-# 
-# sysdimet2$energiakj <- sysdimet2$energia # Sysdimet-artikkelin mukaan energia on kilojouleina
-# 
-# sysdimet2$mufaepros <- sysdimet2$mufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
-# sysdimet2$pufaepros <- sysdimet2$pufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
-# sysdimet2$safaepros <- sysdimet2$safa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
-# sysdimet2$hhepros <- sysdimet2$hhydr * 17 / sysdimet2$energiakj * 100 # Hiilihydraatin energiakerroin on 17 kJ/g (4 kcal/g)
-# sysdimet2$protepros <- sysdimet2$prot * 17 / sysdimet2$energiakj * 100 # Proteiinin energiakerroin on 17 kJ/g (4 kcal/g)
-# sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
-# 
-# sysdimet2 <- sysdimet2[order(sysdimet2$SUBJECT_ID, sysdimet2$WEEK),]
-# 
-# write.csv2(sysdimet2, "data/SYSDIMET_epros.csv", row.names = FALSE)
+sysdimet <- read.csv(file="data/SYSDIMET.csv", sep=";", dec=",")
+
+sysdimet$SUBJECT_ID <- factor(sysdimet$SUBJECT_ID)
+sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
+
+sysdimet_ika <- read.csv(file="data/SYSDIMET_ika.csv", sep=";", dec=",")
+sysdimet_ika <- unique(sysdimet_ika)
+sysdimet_ika$SUBJECT_ID <- factor(sysdimet_ika$SUBJECT_ID)
+sysdimet2 <- sysdimet %>% inner_join(sysdimet_ika, by="SUBJECT_ID")
+
+sysdimet2$energiakj <- sysdimet2$energia # Sysdimet-artikkelin mukaan energia on kilojouleina
+
+sysdimet2$mufaepros <- sysdimet2$mufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+sysdimet2$pufaepros <- sysdimet2$pufa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+sysdimet2$safaepros <- sysdimet2$safa * 37 / sysdimet2$energiakj * 100 # Rasvan energiakerroin on 37 kJ/g (9 kcal/g)
+sysdimet2$hhepros <- sysdimet2$hhydr * 17 / sysdimet2$energiakj * 100 # Hiilihydraatin energiakerroin on 17 kJ/g (4 kcal/g)
+sysdimet2$protepros <- sysdimet2$prot * 17 / sysdimet2$energiakj * 100 # Proteiinin energiakerroin on 17 kJ/g (4 kcal/g)
+sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
+sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
+sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
+
+sysdimet2$kuituepros <- sysdimet2$kuitu * 17 / sysdimet2$energiakj * 100 # Kuidun energiakerroin on 8 kJ/g (2 kcal/g)
+
+sysdimet2$linoliepros <- sysdimet2$linoli * 37 / sysdimet2$energiakj * 100 # Rasvahappojen energia-arvo on 37 kJ/g
+sysdimet2$linoleeniepros <- sysdimet2$linoleeni * 37 / sysdimet2$energiakj * 100 # Rasvahappojen energia-arvo on 37 kJ/g
+sysdimet2$sakkaroosiepros <- sysdimet2$sakkaroosi * 17 / sysdimet2$energiakj * 100 # Sakkaroosin energia-arvo on 17 kJ/g (4 kcal/g)
+
+sysdimet2 <- sysdimet2[order(sysdimet2$SUBJECT_ID, sysdimet2$WEEK),]
+
+write.csv2(sysdimet2, "data/SYSDIMET_epros.csv", row.names = FALSE)
 
 sysdimet <- read.csv(file="data/SYSDIMET_epros.csv", sep=";", dec=",")
 
@@ -63,7 +71,7 @@ sysdimet$kolestrolilaakitys <- factor(sysdimet$kolestrolilaakitys)
 
 # Define how to iterate through the graph
 sysdimet_predictors <- sysdimet_datadesc[sysdimet_datadesc$Order==100,]    
-sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,] 
+sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,]
 
 ```
 
@@ -228,11 +236,10 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-#source("mebn/v3/MEBNv3.r")
-
 for (person_id in 1:1) {
 
-  person_id <- 15
+  source("mebn/v3/MEBNv3.r")
+  person_id <- 1
     
   print(paste0("Simulating patient ", person_id))
 
@@ -247,9 +254,18 @@ for (person_id in 1:1) {
   
   personal_model_dir <- paste0(graph_dir,person_id)
   personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
-
-  # Sample diet proposals and matching concentration predictions
   
+  V(personal_graph)["fshdl"]$type <- 200
+  V(personal_graph)["fsldl"]$type <- 200
+  V(personal_graph)["fsins"]$type <- 300
+  V(personal_graph)["fskol"]$type <- 300
+  V(personal_graph)["fpgluk"]$type <- 300
+  
+  recommeded_concentrations$lower_limits <- recommeded_concentrations$lower_limits[1:2]
+  recommeded_concentrations$upper_limits <- recommeded_concentrations$upper_limits[1:2]
+  
+  # Sample diet proposals and matching concentration predictions
+
   intake_model <- mebn.Query(reaction_graph = personal_graph,
                            graph_dir = personal_model_dir,
                            queried_nodes = queried_nodes,
@@ -274,20 +290,23 @@ for (person_id in 1:1) {
 
   fshdl <- result$concentration[,,1]
   fsldl <- result$concentration[,,2]
-  fsins <- result$concentration[,,3]
-  fskol <- result$concentration[,,4]
-  fpgluk <- result$concentration[,,5]
+  #fsins <- result$concentration[,,3]
+  #fskol <- result$concentration[,,4]
+  #fpgluk <- result$concentration[,,5]
   
   proposals <- 1:dim(fshdl)[1]
   proposal_samples <- 1:dim(fshdl)[2]
 
-  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)), fsins=as.vector(t(fsins)), fskol=as.vector(t(fskol)), fpgluk=as.vector(t(fpgluk)))
+  #concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)), fsins=as.vector(t(fsins)), fskol=as.vector(t(fskol)), fpgluk=as.vector(t(fpgluk)))
+
+  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)))
   
   # Get the original scale levels of potassium and potassium from each diet proposal
   intake_proposals.df <- data.frame(proposal=proposals)
 
   intake_proposals.df$lp <- result$lp__
   intake_proposals.df$u <- result$preference
+  intake_proposals.df$boundsum <- result$softbound_sum
   
   for (node_index in 1:length(queried_nodes)) {
     node_name <- queried_nodes[[node_index]]
@@ -306,24 +325,36 @@ for (person_id in 1:1) {
   fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
   fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
 
+  # proposal_probs.df <- concs.df %>%
+  # select(proposal,fshdl,fsldl,fsins,fskol,fpgluk) %>%
+  # group_by(proposal) %>%
+  # summarise(
+  #   fshdl_mu = mean(fshdl),
+  #   fsldl_mu = mean(fsldl),
+  #   fsins_mu = mean(fsins),
+  #   fskol_mu = mean(fskol),
+  #   fpgluk_mu = mean(fpgluk),
+  #   fshdl_prob = (ecdf(fshdl)(fshdl_recommendations[2]) - ecdf(fshdl)(fshdl_recommendations[1])),
+  #   fsldl_prob = (ecdf(fsldl)(fsldl_recommendations[2]) - ecdf(fsldl)(fsldl_recommendations[1])),
+  #   fsins_prob = (ecdf(fsins)(fsins_recommendations[2]) - ecdf(fsins)(fsins_recommendations[1])),
+  #   fskol_prob = (ecdf(fskol)(fskol_recommendations[2]) - ecdf(fskol)(fskol_recommendations[1])),
+  #   fpgluk_prob = (ecdf(fpgluk)(fpgluk_recommendations[2]) - ecdf(fpgluk)(fpgluk_recommendations[1])),
+  #   lowest_conc_prob = min(fshdl_prob, fsldl_prob, fsins_prob, fskol_prob, fpgluk_prob),
+  #   iid_prob = fshdl_prob * fsldl_prob * fsins_prob * fskol_prob * fpgluk_prob,
+  # )
+
   proposal_probs.df <- concs.df %>%
-  select(proposal,fshdl,fsldl,fsins,fskol,fpgluk) %>%
+  select(proposal,fshdl,fsldl) %>%
   group_by(proposal) %>%
   summarise(
     fshdl_mu = mean(fshdl),
     fsldl_mu = mean(fsldl),
-    fsins_mu = mean(fsins),
-    fskol_mu = mean(fskol),
-    fpgluk_mu = mean(fpgluk),
     fshdl_prob = (ecdf(fshdl)(fshdl_recommendations[2]) - ecdf(fshdl)(fshdl_recommendations[1])),
     fsldl_prob = (ecdf(fsldl)(fsldl_recommendations[2]) - ecdf(fsldl)(fsldl_recommendations[1])),
-    fsins_prob = (ecdf(fsins)(fsins_recommendations[2]) - ecdf(fsins)(fsins_recommendations[1])),
-    fskol_prob = (ecdf(fskol)(fskol_recommendations[2]) - ecdf(fskol)(fskol_recommendations[1])),
-    fpgluk_prob = (ecdf(fpgluk)(fpgluk_recommendations[2]) - ecdf(fpgluk)(fpgluk_recommendations[1])),
-    lowest_conc_prob = min(fshdl_prob, fsldl_prob, fsins_prob, fskol_prob, fpgluk_prob),
-    iid_prob = fshdl_prob * fsldl_prob * fsins_prob * fskol_prob * fpgluk_prob,
+    lowest_conc_prob = min(fshdl_prob, fsldl_prob),
+    iid_prob = fshdl_prob * fsldl_prob,
   )
-  
+    
   # Join intake and resulting concentrations
   accepted_intake.df <- proposal_probs.df %>% inner_join(intake_proposals.df, by="proposal")
 
@@ -383,33 +414,55 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
-# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
+# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
+
+intake_proposals.df[intake_proposals.df$boundsum==4,]
 
 ```
 
 ```{r fig.height=8, inference_debug}
-    conc_plot1 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fshdl_mu, color=preference), show.legend=TRUE) +
+  result <- rstan::extract(intake_model)
+
+  fshdl <- result$concentration[,,1]
+  fsldl <- result$concentration[,,2]
+  fsins <- result$concentration[,,3]
+  fskol <- result$concentration[,,4]
+  fpgluk <- result$concentration[,,5]
+
+  proposals <- 1:dim(fshdl)[1]
+  proposal_samples <- 1:dim(fshdl)[2]
+
+  #concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)), fsins=as.vector(t(fsins)), fskol=as.vector(t(fskol)), fpgluk=as.vector(t(fpgluk)))
+  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), fshdl=as.vector(t(fshdl)), fsldl=as.vector(t(fsldl)))
+  
+  concs.df$lp <- result$lp__
+  concs.df$bs <- result$softbound_sum
+  concs.df$preference <- result$preference
+  
+  concs.df <- concs.df[concs.df$bs==4,]
+  
+    conc_plot1 <- ggplot(concs.df) +
+      geom_point(aes(y=lp, x=fshdl, color=bs), show.legend=TRUE) +
       geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
-    conc_plot2 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fsldl_mu, color=preference), show.legend=FALSE) +
+    conc_plot2 <- ggplot(concs.df) +
+      geom_point(aes(y=lp, x=fsldl, color=bs), show.legend=FALSE) +
       geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
-    conc_plot3 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fsins_mu, color=preference), show.legend=FALSE) +
+    conc_plot3 <- ggplot(concs.df) +
+      geom_point(aes(y=lp, x=fsins, color=bs), show.legend=FALSE) +
       geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
-    conc_plot4 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fskol_mu, color=preference), show.legend=FALSE) +
+    conc_plot4 <- ggplot(concs.df) +
+      geom_point(aes(y=lp, x=fskol, color=bs), show.legend=FALSE) +
       geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
-    conc_plot5 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fpgluk_mu, color=preference), show.legend=FALSE) +
+    conc_plot5 <- ggplot(concs.df) +
+      geom_point(aes(y=lp, x=fpgluk, color=bs), show.legend=FALSE) +
       geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
       scale_color_gradientn(colours = colorspace::diverge_hcl(7))
     
@@ -418,7 +471,11 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
                  c(3),
                  c(4),
                  c(5))
-    
+
+        lay <- rbind(c(1),
+                     c(2)) 
+        
+    lp_plot <- grid.arrange(conc_plot1, conc_plot2, layout_matrix = lay, padding=0)
     lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 ```
 
