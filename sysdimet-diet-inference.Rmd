@@ -25,6 +25,7 @@ source("mebn/v3/MEBNv3.r")
 ```
 
 ```{r data_loading, echo=FALSE, message=FALSE}
+library(dplyr)
 
 # Read the data description
 diet_datadesc <- read.csv(file="data/diet_data_description.csv", header = TRUE, sep = ";", dec=",")

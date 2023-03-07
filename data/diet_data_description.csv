@@ -82,9 +82,9 @@ rasva;rasva;Fat;Fat;mg/d;100;2000;1200;2300;2000;;Gaussian;;FALSE;FALSE;0
 safa;safa;Saturated Fatty Acids;SAFA;pmol/l;0;7,63;5;;;;Gaussian;;FALSE;FALSE;0
 mufa;mufa;Monounsaturated Fatty Acids;MUFA;pmol/l;0;8,1;5;;;;Gaussian;;FALSE;FALSE;0
 pufa;pufa;Polyunsaturated Fatty Acids;PUFA;pmol/l;0;4,9;5;;;;Gaussian;;FALSE;FALSE;0
-linoli;linoli;Linoleic acid;Linoleic acid;g/d;100;2,5;9;;;;Gaussian;2;FALSE;TRUE;0
+linoli;linoli;Linoleic acid;Linoleic acid;g/d;0;2,5;9;;;;Gaussian;2;FALSE;TRUE;0
 linoliepros;linoliepros;Linoleic acid;Linoleic acid;E%;100;2,5;9;;;;Gaussian;2;FALSE;TRUE;105
-linoleeni;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;g/d;100;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;0
+linoleeni;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;g/d;0;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;0
 linoleeniepros;linoleeni;Alpha-linolenic acid;Alpha-linolenic acid;E%;100;0,5;5,0;;;;Gaussian;2;FALSE;TRUE;106
 kol;Kolestroli;Cholesterol;Cholesterol;mg/d;100;0,0;300,0;;;;Gaussian;0;FALSE;TRUE;107
 sellul;Selluloosa;Cellulose;Cellulose;;100;;;;;;Gaussian;2;FALSE;FALSE;111

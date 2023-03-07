@@ -251,7 +251,7 @@ dialysis <- dialysis[order(dialysis$hoitoryhma,
 
 dialdiet_gamma_mv3_two_level <- mebn.bipartite_two_level_multivariate(
                                    reaction_graph = initial_graph, 
-                                   inputdata = dialysis_,
+                                   inputdata = dialysis,
                                    targetdata = no_holdout,
                                    predictor_columns = dialysis_predictors, 
                                    assumed_targets = dialysis_targets, 
@@ -464,7 +464,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:1) {
+for (person_id in 1:37) {
 
   #person_id <- 1
     
@@ -520,7 +520,7 @@ for (person_id in 1:1) {
 
   intake_proposals.df$lp <- result$lp__
   intake_proposals.df$u <- result$preference
-  intake_proposals.df$bs <- result$softbound_sum
+  intake_proposals.df$boundsmet <- result$softbound_sum
   
   for (node_index in 1:length(queried_nodes)) {
     node_name <- queried_nodes[[node_index]]
@@ -528,7 +528,7 @@ for (person_id in 1:1) {
     intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
   }
   
-  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", queried_nodes)
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsmet", queried_nodes)
   
   #  Calculate probability of each proposal being within the recommended concentration limits.
   #  The calculation is done based on empirical cumulative distribution function (ecdf) for each concentration distribution. 
@@ -562,7 +562,7 @@ for (person_id in 1:1) {
   # - Do we have any accepted proposals?
   if (nrow(accepted_intake.df) > 0)
   {
-    #saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
     recommandation_probability <- 0.90
       
@@ -571,7 +571,7 @@ for (person_id in 1:1) {
       filter(lowest_conc_prob >= recommandation_probability) %>%
       as.data.frame()
 
-    #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
     print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
@@ -607,7 +607,7 @@ for (person_id in 1:1) {
   
   # plotting
   
-  if (TRUE) {
+  if (FALSE) {
     
     conc_plot1 <- ggplot(recommendation_intake.df) +
       geom_point(aes(y=lp, x=pk_mu, color=preference)) +
@@ -630,7 +630,7 @@ for (person_id in 1:1) {
     
     lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
     
-    #ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+    ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
   }
 
@@ -638,7 +638,7 @@ for (person_id in 1:1) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 

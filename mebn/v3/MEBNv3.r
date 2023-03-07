@@ -822,7 +822,7 @@ mebn.localsummary_from_multivariate <- function(fit, targetindex)
   #draws <- extract(fit)
   
   #  mean      se_mean         sd          10%         90%     n_eff      Rhat
-  ms <- summary(fit, pars=c(paste0("beta_Intercept"), paste0("beta"), paste0("sigma_b")), probs=c(0.10, 0.90), na.rm = TRUE)
+  ms <- summary(fit, pars=c(paste0("beta_Intercept"), paste0("beta"), paste0("sigma_b_s")), probs=c(0.10, 0.90), na.rm = TRUE)
   #ms <- summary(fit, pars=c(paste0("beta_Intercept"), paste0("beta"), paste0("sigma_b"), paste0("sigma_e")), probs=c(0.10, 0.90), na.rm = TRUE)
   
   ModelSummary <- within(list(),
@@ -833,9 +833,9 @@ mebn.localsummary_from_multivariate <- function(fit, targetindex)
                            fixef         <- round(ms$summary[startsWith(rownames(ms$summary), paste0("beta[",targetindex,",")),],5)[,1]
                            fixef_lCI     <- round(ms$summary[startsWith(rownames(ms$summary), paste0("beta[",targetindex,",")),],5)[,4]
                            fixef_uCI     <- round(ms$summary[startsWith(rownames(ms$summary), paste0("beta[",targetindex,",")),],5)[,5]
-                           ranef_sd      <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b[",targetindex,",")),],5)[,1]
-                           ranef_sd_lCI  <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b[",targetindex,",")),],5)[,4]
-                           ranef_sd_uCI  <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b[",targetindex,",")),],5)[,5]
+                           ranef_sd      <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b_s[",targetindex,",")),],5)[,1]
+                           ranef_sd_lCI  <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b_s[",targetindex,",")),],5)[,4]
+                           ranef_sd_uCI  <- round(ms$summary[startsWith(rownames(ms$summary), paste0("sigma_b_s[",targetindex,",")),],5)[,5]
                          })
 
   # This is missing from the cross-correlation model
@@ -2346,7 +2346,7 @@ mebn.extract_multilevel_graph <- function(person_id, group_id, reaction_graph, a
     reaction_graph <- set_vertex_attr(reaction_graph, "value_sd", target_vertex, sd(original_personal_concentrations[,c]))
     
     # - shape of gamma distribution, common for all the persons
-    localfit_gamma_shape <- extract(localfit, pars = c(paste0("g_alpha[",c,"]")))
+    localfit_gamma_shape <- rstan::extract(localfit, pars = c(paste0("g_alpha[",c,"]")))
     g_alpha_file <- paste0(target_name, "_g_alpha.rds")
     saveRDS(localfit_gamma_shape, paste0(personal_model_dir, "/", g_alpha_file))
     target_vertex$g_alpha <- g_alpha_file
@@ -2355,7 +2355,7 @@ mebn.extract_multilevel_graph <- function(person_id, group_id, reaction_graph, a
     
     # - adjusted intercept
     
-    localfit_p_intercept <- extract(localfit, pars = c(paste0("personal_intercept[",person_id,",",c,"]")))
+    localfit_p_intercept <- rstan::extract(localfit, pars = c(paste0("personal_intercept[",person_id,",",c,"]")))
     int_samples_file <- paste0(target_name, "_personal_intercept.rds")
     saveRDS(localfit_p_intercept, paste0(personal_model_dir, "/", int_samples_file))
     
@@ -2471,7 +2471,7 @@ mebn.extract_multilevel_graph <- function(person_id, group_id, reaction_graph, a
       # Data values are also stored in edge attributes for easier visualization
       # and where to find the full sampled distribution
       personal_effect_property <- paste0("personal_effect[",person_id,",",c,",",p,"]")
-      personal_beta <- extract(localfit, pars = personal_effect_property)
+      personal_beta <- rstan::extract(localfit, pars = personal_effect_property)
       personal_beta <- unlist(personal_beta, use.names=FALSE) # convert from one item list to vector
       effect_name <- paste0(predictor_name,"_",target_name,"_beta")
       saveRDS(personal_beta, paste0(personal_model_dir, "/", effect_name, ".rds"))
@@ -2552,7 +2552,7 @@ mebn.extract_personal_graph_from_mv_fixedtargets <- function(person_id, reaction
     target_vertex <- V(reaction_graph)[target_name]
     
     # - shape of gamma distribution, common for all the persons
-    localfit_gamma_shape <- extract(localfit, pars = c(paste0("g_alpha_",target_name)))
+    localfit_gamma_shape <- rstan::extract(localfit, pars = c(paste0("g_alpha_",target_name)))
     g_alpha_file <- paste0(target_name, "_g_alpha.rds")
     saveRDS(localfit_gamma_shape, paste0(personal_model_dir, "/", g_alpha_file))
     target_vertex$g_alpha <- g_alpha_file
@@ -2561,7 +2561,7 @@ mebn.extract_personal_graph_from_mv_fixedtargets <- function(person_id, reaction
     #V(g)["pk"]$g_alpha
     
     # - personal intercept
-    localfit_p_intercept <- extract(localfit, pars = c(paste0("personal_intercept_",target_name,"[",person_id,"]")))
+    localfit_p_intercept <- rstan::extract(localfit, pars = c(paste0("personal_intercept_",target_name,"[",person_id,"]")))
     int_samples_file <- paste0(target_name, "_personal_intercept.rds")
     saveRDS(localfit_p_intercept, paste0(personal_model_dir, "/", int_samples_file))
     
@@ -2615,7 +2615,7 @@ mebn.extract_personal_graph_from_mv_fixedtargets <- function(person_id, reaction
       # Data values are also stored in edge attributes for easier visualization
       # and where to find the full sampled distribution
       effect_property <- paste0("personal_effect_", target_name, "[", person_id, ",", p ,"]")
-      personal_beta <- extract(localfit, pars = effect_property)
+      personal_beta <- rstan::extract(localfit, pars = effect_property)
       personal_beta <- unlist(personal_beta, use.names=FALSE) # convert from one item list to vector
       effect_name <- paste0(predictor_name,"_",target_name,"_beta")
       saveRDS(personal_beta, paste0(personal_model_dir, "/", effect_name, ".rds"))
@@ -3868,7 +3868,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   rstan_options (auto_write=TRUE)
   options (mc.cores=parallel::detectCores ())
   
-  query_result <- stan(file=stan_model_file, warmup = 1000, iter=2000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
+  query_result <- stan(file=stan_model_file, warmup = 1000, iter=3000, chains=4, chain_id=1L, algorithm="NUTS", control = list(adapt_delta = 0.95, max_treedepth = 15), data=params, seed=483892929)
 
   #m <- stan_model(file=stan_model_file)
   #query_result <- optimizing(m, data=params, seed=483892929, verbose=TRUE, init = 0)
