@@ -43,7 +43,8 @@ data {
     real preference_strength;
     real linear_transformation;
     
-    real bound_steepness;
+    real bound_steepness;     // steepness of single soft bound
+    real bound_requirement;   // steepness of meeting all the bounds
 }
 
 transformed data {
@@ -52,13 +53,11 @@ transformed data {
   // This part of the expected value (mu) does not change during the sampling
   real mu_q0[responses];
 
-  real Y_lower_trans[responses];
-  real Y_upper_trans[responses];      
+  //real Y_lower_trans[responses];
+  //real Y_upper_trans[responses];      
 
   for (m in 1:responses) {
     mu_q0[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
-    Y_lower_trans[m] = Y_lower_limits[m] + linear_transformation;
-    Y_upper_trans[m] = Y_upper_limits[m] + linear_transformation;
   } 
 }
 
@@ -67,7 +66,6 @@ parameters {
   // Resulting parameters of this inference are these personal recommendations for intake proposals Q
   // Each nutrient Q is given lower and upperlimits for its recommendation
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
-
 }
 
 transformed parameters {
@@ -79,14 +77,14 @@ transformed parameters {
 
   // Probability of reaching the concentrations limits
   for (m in 1:responses) {
-    Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]) + linear_transformation;
+    Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
     
-    softbound_sum += inv_logit((Y_mu[m] - Y_lower_trans[m]) * bound_steepness);
-    softbound_sum += inv_logit((Y_upper_trans[m] - Y_mu[m]) * bound_steepness);
+    softbound_sum += inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
+    softbound_sum += inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
   }
 
-  // we prefer strongly that all the bounds are met with lambda = 100
-  in_concentration_range = exponential_lpdf(2*responses - softbound_sum | 100);
+  // bound_requirement is the lambda of exponential distribution
+  in_concentration_range = exponential_lpdf(2*responses - softbound_sum | bound_requirement);
 
   // Preference is published as parameter for visualization
   // - diet_preference returns lpdf_exponential()
@@ -111,20 +109,20 @@ model {
 
 generated quantities {
   
-  real concentration[posterior_samples, responses];
-  real mu_pred[responses];
-  real mu_q0_pred[responses];
-  
-  for (m in 1:responses) {
-    
-    mu_q0_pred[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
-
-    mu_pred[m] = mu_q0_pred[m] + dot_product(Q, Q_beta_point[m]);
-    
-    for (po in 1:posterior_samples)
-    {
-      concentration[po, m] = gamma_rng(alpha_point[m], alpha_point[m] / (mu_pred[m] + linear_transformation)) - linear_transformation;
-    }
-  }
+  // real concentration[posterior_samples, responses];
+  // real mu_pred[responses];
+  // real mu_q0_pred[responses];
+  // 
+  // for (m in 1:responses) {
+  // 
+  //   mu_q0_pred[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
+  // 
+  //   mu_pred[m] = mu_q0_pred[m] + dot_product(Q, Q_beta_point[m]);
+  // 
+  //   for (po in 1:posterior_samples)
+  //   {
+  //     concentration[po, m] = gamma_rng(alpha_point[m], alpha_point[m] / (mu_pred[m] + linear_transformation)) - linear_transformation;
+  //   }
+  // }
 
 }
