@@ -122,6 +122,9 @@ example_predictors[example_predictors$Dialysis==TRUE,]$dialysis_sd <- sapply(exa
 
 sysdimet <- read.csv(file="data/SYSDIMET_epros.csv", sep=";", dec=",")
 
+# Only control cohort of Sysdimet
+sysdimet <- sysdimet[sysdimet$ryhma=='kontrolli',]
+
 example_predictors$sysdimet_mean <- 0
 example_predictors$sysdimet_sd <- 0
 
@@ -464,7 +467,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:37) {
+for (person_id in 1:1) {
 
   #person_id <- 1
     
@@ -571,7 +574,7 @@ for (person_id in 1:37) {
       filter(lowest_conc_prob >= recommandation_probability) %>%
       as.data.frame()
 
-    saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+    #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
       
     print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
@@ -607,7 +610,7 @@ for (person_id in 1:37) {
   
   # plotting
   
-  if (FALSE) {
+  if (TRUE) {
     
     conc_plot1 <- ggplot(recommendation_intake.df) +
       geom_point(aes(y=lp, x=pk_mu, color=preference)) +
@@ -630,7 +633,7 @@ for (person_id in 1:37) {
     
     lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
     
-    ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
+    #ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
 
   }
 
@@ -638,9 +641,14 @@ for (person_id in 1:37) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
+
+ggplot(accepted_intake.df) +
+      geom_point(aes(y=lp, x=boundsmet))
+
+recommendation_intake.df$boundsmet
 
 ```
 
