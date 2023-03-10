@@ -73,14 +73,20 @@ transformed parameters {
   real in_concentration_range;
   real preference;
   real Y_mu[responses];
+  real Y_bound[responses*2];
   real softbound_sum = 0;
 
   // Probability of reaching the concentrations limits
   for (m in 1:responses) {
     Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
+  
+    // lower bound sigmoid    
+    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
     
-    softbound_sum += inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
-    softbound_sum += inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
+    // upper bound sigmoid
+    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
+    
+    softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
   }
 
   // bound_requirement is the lambda of exponential distribution
@@ -92,19 +98,31 @@ transformed parameters {
 }
 
 model {
-
+  
+  real Y_range;
+  
+  // PRIORS
+  
+  // nutrient proposals are taken from uniform distribution
   for (i in 1:r) {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
-  
-  {
-    // probability of being inside the concentration normal ranges
-    target += in_concentration_range;
-    
-    // diet preference conditionally on being inside the concentration limits
-    target += preference;
-  }
 
+  // center of concentration normal ranges is slightly preferred
+  for (m in 1:responses) {
+     Y_range = Y_upper_limits[m]-Y_lower_limits[m];
+     target += normal_lpdf(Y_mu[m] | Y_range/2, Y_range*5);
+  //   
+  //   //target += uniform_lpdf(Y_mu[m] | Y_lower_limits[m], Y_upper_limits[m]);
+  }
+  
+  // POSTERIOR
+  
+  // probability of being inside the concentration normal ranges
+  target += in_concentration_range;
+    
+  // diet preference conditionally on being inside the concentration limits
+  target += preference;
 }
 
 generated quantities {
