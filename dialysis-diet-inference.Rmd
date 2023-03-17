@@ -469,7 +469,7 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 for (person_id in 1:1) {
 
-  #person_id <- 1
+  person_id <- 2
     
   print(paste0("Simulating patient ", person_id))
 
@@ -479,9 +479,6 @@ for (person_id in 1:1) {
   # Normal ranges of concentration are personalized
   personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
   recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
-  
-  #print(paste0("personal lower limits: ", as.vector(recommeded_concentrations$lower_limits)))
-  #print(paste0("personal upper limits: ", as.vector(recommeded_concentrations$upper_limits)))
   
   personal_model_dir <- paste0(graph_dir,person_id)
   personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
@@ -509,134 +506,82 @@ for (person_id in 1:1) {
   # Extract all the samples and correlate concentrations and intake with proposal ids
   result <- rstan::extract(intake_model)
 
-  pk <- result$concentration[,,1]
-  fppi <- result$concentration[,,2]
-  palb <- result$concentration[,,3]
-  
-  proposals <- 1:dim(pk)[1]
-  proposal_samples <- 1:dim(pk)[2]
-
-  concs.df <- data.frame(proposal=rep(proposals, each = length(proposal_samples)), pk=as.vector(t(pk)),fppi=as.vector(t(fppi)),palb=as.vector(t(palb)))
-  
-  # Get the original scale levels of potassium and potassium from each diet proposal
-  intake_proposals.df <- data.frame(proposal=proposals)
-
+  # Add inference details
+  intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
   intake_proposals.df$lp <- result$lp__
-  intake_proposals.df$u <- result$preference
-  intake_proposals.df$boundsmet <- result$softbound_sum
+  intake_proposals.df$preference <- result$preference
+  intake_proposals.df$boundsum <- result$softbound_sum
   
+  # Add expected values of concentrations
+  for (node_index in 1:nrow(assumedtargets)) {
+    node_name <- assumedtargets[node_index,]$Name
+    conc_mu_distribution <- result$Y_mu[,node_index]
+    intake_proposals.df <- cbind(intake_proposals.df, conc_mu_distribution)
+  }
+  
+  # Add related intake proposals
   for (node_index in 1:length(queried_nodes)) {
     node_name <- queried_nodes[[node_index]]
     Q_proposal <- result$Q[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
     intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
   }
   
-  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsmet", queried_nodes)
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsum", assumedtargets$Name, queried_nodes)
   
-  #  Calculate probability of each proposal being within the recommended concentration limits.
-  #  The calculation is done based on empirical cumulative distribution function (ecdf) for each concentration distribution. 
-  
-  pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-  fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-  palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+  saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
-  proposal_probs.df <- concs.df %>%
-  select(proposal,pk,fppi,palb) %>%
-  group_by(proposal) %>%
-  summarise(
-    pk_mu = mean(pk),
-    fppi_mu = mean(fppi),
-    palb_mu = mean(palb),
-    pk_prob = (ecdf(pk)(pk_recommendations[2]) - ecdf(pk)(pk_recommendations[1])),
-    fppi_prob = (ecdf(fppi)(fppi_recommendations[2]) - ecdf(fppi)(fppi_recommendations[1])),
-    palb_prob = (ecdf(palb)(palb_recommendations[2]) - ecdf(palb)(palb_recommendations[1])),
-    lowest_conc_prob = min(pk_prob, fppi_prob, palb_prob),
-    iid_prob = pk_prob * fppi_prob * palb_prob,
-  )
-  
-  # Join intake and resulting concentrations
-  accepted_intake.df <- proposal_probs.df %>% inner_join(intake_proposals.df, by="proposal")
+  # Filter recommendation distributions
+  recommendation_intake.df <- intake_proposals.df %>%
+    filter(boundsum >= 2 * nrow(assumedtargets) - 0.5) %>%
+    as.data.frame()
 
-  # Highest probability that can be reached
-  max_conc_prob <- max(proposal_probs.df$lowest_conc_prob)
-
-  # Search for the widest nutrient intake range within the accepted proposals  
+  saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
+      
+  print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
   
-  # - Do we have any accepted proposals?
-  if (nrow(accepted_intake.df) > 0)
+  if (nrow(recommendation_intake.df) > 0)
   {
-    saveRDS(accepted_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
-
-    recommandation_probability <- 0.90
+      RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
+      RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
+      RI_lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
+      RI_upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
       
-    # Filter recommendation distributions
-    recommendation_intake.df <- accepted_intake.df %>%
-      filter(lowest_conc_prob >= recommandation_probability) %>%
-      as.data.frame()
-
-    #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",person_id,".rds"))
-      
-    print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
-  
-    if (nrow(recommendation_intake.df) > 0)
-    {
-        RI_mean <- colMeans(recommendation_intake.df[queried_nodes])
-        RI_quantiles <- lapply(recommendation_intake.df[queried_nodes], quantile, probs = c(0.025,0.975))
-        RI_lower_quantiles <- as.vector(unlist(RI_quantiles)[seq(1, length(queried_nodes)*2, by = 2)])
-        RI_upper_quantiles <- as.vector(unlist(RI_quantiles)[seq(2, length(queried_nodes)*2, by = 2)])
-        
-        personal_intake <- c(person_id,
-                             subject_code,
-                             1,
-                             recommendation_intake.df$pk_mean,
-                             recommendation_intake.df$fppi_mean,
-                             recommendation_intake.df$palb_mean,
-                             RI_mean,
-                             RI_lower_quantiles,
-                             RI_upper_quantiles,
-                             rep(0, nrow(assumedtargets) * 3))
-    } 
-    else
-    {
-       personal_intake <- c(person_id,
-                            subject_code,
-                            0,
-                            0,0,0,
-                            rep(0,length(queried_nodes) * 3 + nrow(assumedtargets) * 3))
-    }
-
-    patient_summary <- rbind(patient_summary, personal_intake)
-  }
-  
-  # plotting
-  
-  if (TRUE) {
-    
-    conc_plot1 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=pk_mu, color=preference)) +
-      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    conc_plot2 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=fppi_mu, color=preference)) +
-      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    conc_plot3 <- ggplot(recommendation_intake.df) +
-      geom_point(aes(y=lp, x=palb_mu, color=preference)) +
-      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-    
-    lay <- rbind(c(1),
-                 c(2),
-                 c(3))
-    
-    lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
-    
-    #ggsave(paste0("figures/dialysis/personal_recommendations/log_probability_",person_id,".pdf"), plot = lp_plot)
-
+      personal_intake <- c(person_id,
+                           subject_code,
+                           1,
+                           RI_mean,
+                           RI_lower_quantiles,
+                           RI_upper_quantiles,
+                           mean(recommendation_intake.df$pk),
+                           mean(recommendation_intake.df$fppi),
+                           mean(recommendation_intake.df$palb),
+                           colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
+                           colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                           )
+  } 
+  else
+  {
+     personal_intake <- c(person_id,
+                          subject_code,
+                          0,
+                          rep(0,length(queried_nodes) * 3),
+                          mean(recommendation_intake.df$pk),
+                          mean(recommendation_intake.df$fppi),
+                          mean(recommendation_intake.df$palb),
+                          colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
+                          colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                          )
   }
 
+  patient_summary <- rbind(patient_summary, personal_intake)
+}
+
+colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lowerbound"), paste0(assumedtargets$Name, "_upperbound"))
+
+saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+
+# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
+  
 }
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
@@ -646,6 +591,40 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 
 ```
+
+```{r fig.height=8, inference_debug}
+
+pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+
+recommendation_intake.df <- intake_proposals.df 
+#  filter(boundsum >= 2 * nrow(assumedtargets) - 3) %>%
+#  as.data.frame()
+
+conc_plot1 <- ggplot(recommendation_intake.df) +
+  geom_point(aes(y=lp, x=pk, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot2 <- ggplot(recommendation_intake.df) +
+  geom_point(aes(y=lp, x=fppi, color=preference), show.legend=FALSE) +
+  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot3 <- ggplot(recommendation_intake.df) +
+  geom_point(aes(y=lp, x=palb, color=preference), show.legend=FALSE) +
+  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+lay <- rbind(c(1),
+             c(2),
+             c(3))
+
+lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay, padding=0)
+  
+```
+
 
 
 ```{r concentration_predictions}
