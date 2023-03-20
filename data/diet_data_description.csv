@@ -91,7 +91,7 @@ sellul;Selluloosa;Cellulose;Cellulose;;100;;;;;;Gaussian;2;FALSE;FALSE;111
 ligniini;Ligniini;Lignin;Lignin;;100;;;;;;Gaussian;2;FALSE;FALSE;112
 alkoholi;Alkoholi;Alcohol;Insulin;;100;;;;;;Gaussian;2;FALSE;FALSE;113
 foolih;Foolihappo;Folic acid;Folic acid;ug/d;100;100;1000;300;;;Gaussian;2;FALSE;TRUE;115
-cvit;C-vit.;Vitamin C;Vitamin C;mg/d;100;10;1000;75;;;Gaussian;2;FALSE;TRUE;116
+cvit;C-vit.;Vitamin C;Vit. C;mg/d;100;10;1000;75;;;Gaussian;2;FALSE;TRUE;116
 epa;EPA-rasvahappo;EPA-fatty acid;EPA-fatty acid;mg/d;100;0;2,5;;;;Gaussian;2;FALSE;TRUE;117
 dha;DHA-rasvahappo;DHA-fatty acid;DHA-fatty acid;mg/d;100;0;2,5;;;;Gaussian;2;FALSE;TRUE;118
 fshdl;HDL-kolestroli;HDL-chol.;HDL-chol.;mmol/l;200;1;4;0;;;Gaussian;;FALSE;TRUE;0

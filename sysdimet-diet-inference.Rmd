@@ -239,8 +239,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
 for (person_id in 1:length(kontrolli)) {
+#for (person_id in 1:1) {
 
-  #person_id <- 10
+  #person_id <- 17
   
   print(paste0("Simulating patient ", person_id))
 
@@ -330,8 +331,8 @@ for (person_id in 1:length(kontrolli)) {
                            mean(recommendation_intake.df$fsins),
                            mean(recommendation_intake.df$fskol),
                            mean(recommendation_intake.df$fpgluk),
-                           colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
-                           colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                           apply(result$Y_bound[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
+                           apply(result$Y_bound[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
                            )
   } 
   else
@@ -345,8 +346,8 @@ for (person_id in 1:length(kontrolli)) {
                           mean(intake_proposals.df$fsins),
                           mean(intake_proposals.df$fskol),
                           mean(intake_proposals.df$fpgluk),
-                          colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
-                          colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                          apply(result$Y_bound[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
+                          apply(result$Y_bound[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
                           )
   }
 
@@ -373,10 +374,16 @@ recommendation_intake.df <- intake_proposals.df
 #  filter(boundsum >= 2 * nrow(assumedtargets) - 3) %>%
 #  as.data.frame()
 
+fshdl_accepted <- FALSE
+
+#                                   colorspace::diverge_hcl(7, c = 240, l = c(90, 50), power = 1),
+
+lp_mid <- mean(recommendation_intake.df$lp) * 0.40
+
 conc_plot1 <- ggplot(recommendation_intake.df) +
-  geom_point(aes(y=lp, x=fshdl, color=preference), show.legend=TRUE) +
+  geom_point(aes(y=lp, x=fshdl, color=preference), show.legend=FALSE) +
   geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+  scale_colour_gradient2(low="#FFFFFF", high="#00BFFF", midpoint=lp_mid) 
 
 conc_plot2 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fsldl, color=preference), show.legend=FALSE) +
@@ -594,10 +601,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   #normal_palette <- c("#00337C", "#AADDFF", "#DDFFFF", "#03C988")
   #failed_palette <- c("#00337C", "#DDDDDD", "#FFDDDD", "#FF6961")
 
-  normal_palette <- "#00337C"
-  failed_palette <- "#FF6961"
-  low_color <- "#EEEEEE"
-  
+  normal_palette <- "#00BFFF"
+  failed_palette <- "#F44336"
+  low_color <- "#CCCCCC"
+
   plot_index <- 1
   
   for (subject_code in subject_code_vector[1:(persons-1)]) {
@@ -636,13 +643,15 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       pred_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol
       pred_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk
       
-      bound_limit <- 0.5
+      bound_limit <- 0.98
       
       fshdl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_upperbound > bound_limit
       fsldl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_upperbound > bound_limit
       fsins_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_upperbound > bound_limit
       fskol_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_upperbound > bound_limit
       fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
+      
+      lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
       
       conc_plot1 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
@@ -652,11 +661,11 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-        scale_colour_gradient(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette) +
+        scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = person_id)
+        labs(x = element_blank(), y = subject_code)
       
       conc_plot2 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
@@ -666,7 +675,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-        scale_colour_gradient(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette) +
+        scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -680,7 +689,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-        scale_colour_gradient(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette) +
+        scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -694,7 +703,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-        scale_colour_gradient(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette) +
+        scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -708,7 +717,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-        scale_colour_gradient(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette) +
+        scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -757,6 +766,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   fsins_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_upperbound > bound_limit
   fskol_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_upperbound > bound_limit
   fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
+  
+  lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
 
   conc_plot1 <- ggplot(accepted_intake.df) +
     geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
@@ -766,11 +777,11 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-    scale_colour_gradient(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette) +
+    scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-HDL (mmol/l)", y = person_id)
+    labs(x = "fS-HDL (mmol/l)", y = subject_code)
   
   conc_plot2 <- ggplot(accepted_intake.df) +
     geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
@@ -780,7 +791,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-    scale_colour_gradient(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette) +
+    scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -794,7 +805,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-    scale_colour_gradient(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette) +
+    scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -808,8 +819,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-    scale_color_gradientn(colours = if (fskol_accepted) normal_palette else failed_palette) +
-    scale_colour_gradient(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette) +
+    scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -823,7 +833,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-    scale_colour_gradient(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette) +
+    scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -885,6 +895,19 @@ subjects_with_failed_concs <- concinfo.df %>%
 
 sysdimet_lp_plots(subjects_with_failed_concs$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
 
+  #person_id <- concinfo.df[concinfo.df$subject_code == 44,]$person_id
+  #print(paste0("2. person_id: ", person_id))
+
+  #accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+  #accepted_intake.df
+  
+  concinfo.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fsldl_upperbound
+concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fsins_upperbound
+concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fpgluk_upperbound
+
+
 ```
 
 
@@ -901,7 +924,7 @@ sysdimet_lp_plots(kontrolli_group$subject_code[16:34], "figures/sysdimet_concent
 ```
 
 
-```{r result_plot}
+```{r result_plot_for_all_in_kontrolli}
 # Visualize the main results
 library(tibble)
 
@@ -914,8 +937,9 @@ recommendation <- colnames(intake.df)[4:(4+14)]
 cond_nutrients <- sysdimet_predictors[sysdimet_predictors$Condition >= 100,]
 table_colnames <- c("", cond_nutrients$ShortDescription)
 
-up_color <- "#F8766D"
+up_color <- "#C23B22"
 down_color <- "#00BFC4"
+down_color <- "#3A5874"
 keep_color <- "#000000"
   
 recommendation_table.df <- intake.df %>%
@@ -949,32 +973,58 @@ recommendation_table.df <- intake.df %>%
                                               "\\right]}}$"), 
                                               align="c"),
                                             .names = "{.col}")) %>%
-                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
+                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold"), "subject_code"))
 
 # Render PDF table and keep .tex 
 
-kable(recommendation_table.df[1:16], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",16)), 
+# kable(recommendation_table.df[1:16], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",16)), 
+#    col.names = table_colnames,
+#    caption = "Personally recommended intake (RI) for Sysdimet study subjects with lower and upper limits of recommendations.") %>%
+#     kable_styling(latex_options="scale_down") %>%  
+#     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+#    row_spec(0,bold=TRUE) %>%
+#    column_spec(2, color = recommendation_table.df[,17], bold = recommendation_table.df[,32]) %>%
+#    column_spec(3, color = recommendation_table.df[,18], bold = recommendation_table.df[,33]) %>%
+#    column_spec(4, color = recommendation_table.df[,19], bold = recommendation_table.df[,34]) %>%
+#    column_spec(5, color = recommendation_table.df[,20], bold = recommendation_table.df[,35]) %>%
+#    column_spec(6, color = recommendation_table.df[,21], bold = recommendation_table.df[,36]) %>%
+#    column_spec(7, color = recommendation_table.df[,22], bold = recommendation_table.df[,37]) %>%
+#    column_spec(8, color = recommendation_table.df[,23], bold = recommendation_table.df[,38]) %>%
+#    column_spec(9, color = recommendation_table.df[,24], bold = recommendation_table.df[,39]) %>%
+#    column_spec(10, color = recommendation_table.df[,25], bold = recommendation_table.df[,40]) %>%
+#    column_spec(11, color = recommendation_table.df[,26], bold = recommendation_table.df[,41]) %>%
+#    column_spec(12, color = recommendation_table.df[,27], bold = recommendation_table.df[,42]) %>%
+#    column_spec(13, color = recommendation_table.df[,28], bold = recommendation_table.df[,43]) %>%
+#    column_spec(14, color = recommendation_table.df[,29], bold = recommendation_table.df[,44]) %>%
+#    column_spec(15, color = recommendation_table.df[,30], bold = recommendation_table.df[,45]) %>%
+#    column_spec(16, color = recommendation_table.df[,31], bold = recommendation_table.df[,46]) %>%
+#    save_kable(file = "tables/recommendations_sysdimet_kontrolli.pdf", keep_tex = TRUE)
+
+fixed_concs.df <- recommendation_table.df[recommendation_table.df$subject_code %in% subjects_with_failed_concs$subject_code,]
+
+kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",16)), 
    col.names = table_colnames,
    caption = "Personally recommended intake (RI) for Sysdimet study subjects with lower and upper limits of recommendations.") %>%
     kable_styling(latex_options="scale_down") %>%  
     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
    row_spec(0,bold=TRUE) %>%
-   column_spec(2, color = recommendation_table.df[,17], bold = recommendation_table.df[,32]) %>%
-   column_spec(3, color = recommendation_table.df[,18], bold = recommendation_table.df[,33]) %>%
-   column_spec(4, color = recommendation_table.df[,19], bold = recommendation_table.df[,34]) %>%
-   column_spec(5, color = recommendation_table.df[,20], bold = recommendation_table.df[,35]) %>%
-   column_spec(6, color = recommendation_table.df[,21], bold = recommendation_table.df[,36]) %>%
-   column_spec(7, color = recommendation_table.df[,22], bold = recommendation_table.df[,37]) %>%
-   column_spec(8, color = recommendation_table.df[,23], bold = recommendation_table.df[,38]) %>%
-   column_spec(9, color = recommendation_table.df[,24], bold = recommendation_table.df[,39]) %>%
-   column_spec(10, color = recommendation_table.df[,25], bold = recommendation_table.df[,40]) %>%
-   column_spec(11, color = recommendation_table.df[,26], bold = recommendation_table.df[,41]) %>%
-   column_spec(12, color = recommendation_table.df[,27], bold = recommendation_table.df[,42]) %>%
-   column_spec(13, color = recommendation_table.df[,28], bold = recommendation_table.df[,43]) %>%
-   column_spec(14, color = recommendation_table.df[,29], bold = recommendation_table.df[,44]) %>%
-   column_spec(15, color = recommendation_table.df[,30], bold = recommendation_table.df[,45]) %>%
-   column_spec(16, color = recommendation_table.df[,31], bold = recommendation_table.df[,46]) %>%
-   save_kable(file = "tables/recommendations_sysdimet.pdf", keep_tex = TRUE)
+   column_spec(2, color = fixed_concs.df[,17], bold = fixed_concs.df[,32]) %>%
+   column_spec(3, color = fixed_concs.df[,18], bold = fixed_concs.df[,33]) %>%
+   column_spec(4, color = fixed_concs.df[,19], bold = fixed_concs.df[,34]) %>%
+   column_spec(5, color = fixed_concs.df[,20], bold = fixed_concs.df[,35]) %>%
+   column_spec(6, color = fixed_concs.df[,21], bold = fixed_concs.df[,36]) %>%
+   column_spec(7, color = fixed_concs.df[,22], bold = fixed_concs.df[,37]) %>%
+   column_spec(8, color = fixed_concs.df[,23], bold = fixed_concs.df[,38]) %>%
+   column_spec(9, color = fixed_concs.df[,24], bold = fixed_concs.df[,39]) %>%
+   column_spec(10, color = fixed_concs.df[,25], bold = fixed_concs.df[,40]) %>%
+   column_spec(11, color = fixed_concs.df[,26], bold = fixed_concs.df[,41]) %>%
+   column_spec(12, color = fixed_concs.df[,27], bold = fixed_concs.df[,42]) %>%
+   column_spec(13, color = fixed_concs.df[,28], bold = fixed_concs.df[,43]) %>%
+   column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44]) %>%
+   column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45]) %>%
+   column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46]) %>%
+   save_kable(file = "tables/sysdimet_fixed_intake.pdf", keep_tex = TRUE)
+
 ```
 
 
