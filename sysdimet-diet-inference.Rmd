@@ -241,17 +241,22 @@ kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 for (person_id in 1:length(kontrolli)) {
 #for (person_id in 1:1) {
 
-  #person_id <- 17
+  #person_id <- 21
   
-  print(paste0("Simulating patient ", person_id))
+  #print(paste0("Simulating patient ", person_id))
 
   subject_code <- kontrolli[person_id]
+
+  print(paste0("Simulating patient ", subject_code))
 
   # Normal ranges of concentration are personalized
   personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
   recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
   
-  personal_model_dir <- paste0(graph_dir,person_id)
+  # this person_id of kontrolli is different from the whole sysdimet
+  graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
+  
+  personal_model_dir <- paste0(graph_dir,graph_person_id)
   personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
   
   # Sample diet proposals and matching concentration predictions
@@ -301,6 +306,8 @@ for (person_id in 1:length(kontrolli)) {
   }
   
   colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsum", assumedtargets$Name, queried_nodes)
+  
+  # STOP HERE FOR DEBUG
   
   saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
@@ -370,20 +377,17 @@ fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded
 fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
 fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
 
-recommendation_intake.df <- intake_proposals.df 
-#  filter(boundsum >= 2 * nrow(assumedtargets) - 3) %>%
-#  as.data.frame()
+#recommendation_intake.df <- intake_proposals.df 
 
-fshdl_accepted <- FALSE
-
-#                                   colorspace::diverge_hcl(7, c = 240, l = c(90, 50), power = 1),
-
-lp_mid <- mean(recommendation_intake.df$lp) * 0.40
+recommendation_intake.df <- intake_proposals.df %>%
+  filter(boundsum >= 2 * nrow(assumedtargets) - 0.5) %>%
+  as.data.frame()
 
 conc_plot1 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fshdl, color=preference), show.legend=FALSE) +
   geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-  scale_colour_gradient2(low="#FFFFFF", high="#00BFFF", midpoint=lp_mid) 
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) 
+  #scale_colour_gradient2(low="#FFFFFF", high="#00BFFF", midpoint=lp_mid) 
 
 conc_plot2 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fsldl, color=preference), show.legend=FALSE) +
@@ -412,97 +416,13 @@ lay <- rbind(c(1),
              c(5))
 
 lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
+
+ldl <- mean(recommendation_intake.df$fsldl)
+
+df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+df[c("subject_code", "fsldl")]
+
   
-```
-
-```{r concentration_predictions}
-  library(rstan)
-  library(igraph)
-  library(stringr)
-  
-  source("mebn/v3/MEBNv3.r")
-
-  queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
-  patient_summary <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary.rds")
-
-  for (subject_id in 1:37) {
-    
-    subject_id <- 1
-    
-    print(subject_id)
-
-    graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",subject_id)
-    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
-    
-    org_stats <- data.frame(name = subset(sysdimet_predictors$Name, sysdimet_predictors$Distribution == "Gaussian"))
-    org_stats$mean <- sapply(org_stats$name, function(x) mean(sysdimet[[x]]))
-    org_stats$sd <- sapply(org_stats$name, function(x) sd(sysdimet[[x]]))
-  
-    queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
-    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
-    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
-  
-    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
-    
-    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
-    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
-    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
-    
-    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    
-    fshdl_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
-    fsldl_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
-    fsins_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
-    fskol_mu <- params$intercept_point[4] + params$X_evidence_point %*% params$X_beta_point[4,] + Q_values_norm %*% params$Q_beta_point[4,]
-    fpgluk_mu <- params$intercept_point[5] + params$X_evidence_point %*% params$X_beta_point[5,] + Q_values_norm %*% params$Q_beta_point[5,]
-    
-    resulting_conc_mu <- c(fshdl_mu,fsldl_mu,fsins_mu,fskol_mu,fpgluk_mu)
-  
-    quant_limit <- 0.9
-    fshdl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
-    fshdl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
-
-    fsldl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
-    fsldl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
-
-    fsins_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
-    fsins_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
-
-    fskol_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
-    fskol_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
-
-    fpgluk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
-    fpgluk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
-
-    resulting_conc_mu_lCI <- c(fshdl_mu_lCI,fsldl_mu_lCI,fsins_mu_lCI,fskol_mu_lCI,fpgluk_mu_lCI)
-    resulting_conc_mu_uCI <- c(fshdl_mu_uCI,fsldl_mu_uCI,fsins_mu_uCI,fskol_mu_uCI,fpgluk_mu_uCI)
-    
-    patient_summary[patient_summary$person_id == subject_id,]$fshdl <- fshdl_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fshdl_lCI <- fshdl_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fshdl_uCI <- fshdl_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$fsldl <- fsldl_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fsldl_lCI <- fsldl_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fsldl_uCI <- fsldl_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$fsins <- fsins_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fsins_lCI <- fsins_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fsins_uCI <- fsins_mu_uCI
-
-    patient_summary[patient_summary$person_id == subject_id,]$fskol <- fskol_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fskol_lCI <- fskol_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fskol_uCI <- fskol_mu_uCI
-
-    patient_summary[patient_summary$person_id == subject_id,]$fpgluk <- fpgluk_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_lCI <- fpgluk_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_uCI <- fpgluk_mu_uCI
-    
-  }
-  
-  saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
-
 ```
 
 ```{r current_levels}
@@ -602,8 +522,9 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   #failed_palette <- c("#00337C", "#DDDDDD", "#FFDDDD", "#FF6961")
 
   normal_palette <- "#00BFFF"
-  failed_palette <- "#F44336"
-  low_color <- "#CCCCCC"
+  failed_palette <- "#FFAADD"
+  mid_color <- "#FFFFFF"
+  low_color <- "#F44336"
 
   plot_index <- 1
   
@@ -611,7 +532,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     
       person_id <- concinfo.df[concinfo.df$subject_code == subject_code,]$person_id
       
-      print(person_id)
+      #print(subject_code)
       
       accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",person_id,".rds"))
   
@@ -643,7 +564,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       pred_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol
       pred_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk
       
-      bound_limit <- 0.98
+      bound_limit <- 0.95
       
       fshdl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_upperbound > bound_limit
       fsldl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_upperbound > bound_limit
@@ -651,7 +572,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       fskol_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_upperbound > bound_limit
       fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
       
-      lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
+      lp_midpoint <- mean(accepted_intake.df$lp)
       
       conc_plot1 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
@@ -661,12 +582,13 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        scale_color_gradientn(colours = colorspace::heat_hcl(7)) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
         labs(x = element_blank(), y = subject_code)
-      
+
       conc_plot2 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
@@ -675,7 +597,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        scale_colour_gradient2(low=low_color,mid=mid_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_fill_distiller(palette = "Spectral") +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -689,7 +612,9 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+        scale_fill_distiller(palette = "Spectral") +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -703,7 +628,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        scale_color_gradientn(colours = colorspace::diverging_hsv(7)) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -717,7 +643,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        #scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        scale_color_gradientn(colours = colorspace::heat_hcl(5)) +
         theme_bw() +
         theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -777,7 +704,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    #scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -790,8 +718,9 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     geom_vline(xintercept = curr_fsldl, linetype="dashed", color = "black", linewidth=0.3) +
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
+    #scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
     scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -805,7 +734,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    #scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -819,7 +749,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    #scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -833,7 +764,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    #scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
     theme_bw() +
     theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
     theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
@@ -850,7 +782,6 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 }
 
 ```
-
 
 ```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=9, fig.keep='last'}
 source("mebn/v3/MEBNv3.r")
@@ -894,19 +825,6 @@ subjects_with_failed_concs <- concinfo.df %>%
   select(subject_code)
 
 sysdimet_lp_plots(subjects_with_failed_concs$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
-
-  #person_id <- concinfo.df[concinfo.df$subject_code == 44,]$person_id
-  #print(paste0("2. person_id: ", person_id))
-
-  #accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
-  #accepted_intake.df
-  
-  concinfo.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
-
-concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fsldl_upperbound
-concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fsins_upperbound
-concinfo.df[concinfo.df$subject_code %in% subjects_with_failed_concs$subject_code,]$fpgluk_upperbound
-
 
 ```
 
@@ -1027,6 +945,97 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
 
 ```
 
+# TRASHCAN
+
+```{r concentration_predictions}
+  library(rstan)
+  library(igraph)
+  library(stringr)
+  
+  source("mebn/v3/MEBNv3.r")
+
+  queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
+  patient_summary <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+  for (subject_id in 1:37) {
+    
+    subject_id <- 1
+    
+    print(subject_id)
+
+    graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",subject_id)
+    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+    
+    org_stats <- data.frame(name = subset(sysdimet_predictors$Name, sysdimet_predictors$Distribution == "Gaussian"))
+    org_stats$mean <- sapply(org_stats$name, function(x) mean(sysdimet[[x]]))
+    org_stats$sd <- sapply(org_stats$name, function(x) sd(sysdimet[[x]]))
+  
+    queried_nodes <- sysdimet_datadesc[sysdimet_datadesc$Condition >= 100,]$Name
+    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
+    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
+  
+    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
+    
+    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
+    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
+    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
+    
+    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    
+    fshdl_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fsldl_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    fsins_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    fskol_mu <- params$intercept_point[4] + params$X_evidence_point %*% params$X_beta_point[4,] + Q_values_norm %*% params$Q_beta_point[4,]
+    fpgluk_mu <- params$intercept_point[5] + params$X_evidence_point %*% params$X_beta_point[5,] + Q_values_norm %*% params$Q_beta_point[5,]
+    
+    resulting_conc_mu <- c(fshdl_mu,fsldl_mu,fsins_mu,fskol_mu,fpgluk_mu)
+  
+    quant_limit <- 0.9
+    fshdl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
+    fshdl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/fshdl_mu)
+
+    fsldl_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
+    fsldl_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fsldl_mu)
+
+    fsins_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
+    fsins_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/fsins_mu)
+
+    fskol_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
+    fskol_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[4], rate=params$alpha_point[4]/fskol_mu)
+
+    fpgluk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
+    fpgluk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[5], rate=params$alpha_point[5]/fpgluk_mu)
+
+    resulting_conc_mu_lCI <- c(fshdl_mu_lCI,fsldl_mu_lCI,fsins_mu_lCI,fskol_mu_lCI,fpgluk_mu_lCI)
+    resulting_conc_mu_uCI <- c(fshdl_mu_uCI,fsldl_mu_uCI,fsins_mu_uCI,fskol_mu_uCI,fpgluk_mu_uCI)
+    
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl <- fshdl_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl_lCI <- fshdl_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fshdl_uCI <- fshdl_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl <- fsldl_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl_lCI <- fsldl_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsldl_uCI <- fsldl_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fsins <- fsins_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fsins_lCI <- fsins_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fsins_uCI <- fsins_mu_uCI
+
+    patient_summary[patient_summary$person_id == subject_id,]$fskol <- fskol_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fskol_lCI <- fskol_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fskol_uCI <- fskol_mu_uCI
+
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk <- fpgluk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_lCI <- fpgluk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fpgluk_uCI <- fpgluk_mu_uCI
+    
+  }
+  
+  saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
+
+```
 
 
 
