@@ -574,6 +574,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       
       lp_midpoint <- mean(accepted_intake.df$lp)
       
+      gradient_colors <- colorspace::heat_hcl(3)
+      
       conc_plot1 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
@@ -583,11 +585,13 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
         #scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        scale_color_gradientn(colours = colorspace::heat_hcl(7)) +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = subject_code)
+        theme(panel.grid.minor = element_blank()) +
+        #theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+        #theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        #labs(x = element_blank(), y = subject_code) +
+        labs(x = element_blank(), y = paste0(subject_code, " ", "\nlog-prob."))
 
       conc_plot2 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
@@ -597,11 +601,11 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-        scale_colour_gradient2(low=low_color,mid=mid_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        #scale_fill_distiller(palette = "Spectral") +
+        #scale_colour_gradient2(low=low_color,mid=mid_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        theme(panel.grid.minor = element_blank()) +
+        theme(axis.text.y = element_blank()) +
         labs(x = element_blank(), y = element_blank())
   
       conc_plot3 <- ggplot(accepted_intake.df) +
@@ -614,10 +618,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
         #scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
         #scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-        scale_fill_distiller(palette = "Spectral") +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        theme(panel.grid.minor = element_blank()) +
+        theme(axis.text.y = element_blank()) +
         labs(x = element_blank(), y = element_blank())
   
       conc_plot4 <- ggplot(accepted_intake.df) +
@@ -629,10 +633,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
         #scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        scale_color_gradientn(colours = colorspace::diverging_hsv(7)) +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        theme(panel.grid.minor = element_blank()) +
+        theme(axis.text.y = element_blank()) +
         labs(x = element_blank(), y = element_blank())
   
       conc_plot5 <- ggplot(accepted_intake.df) +
@@ -644,13 +648,13 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
         scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
         #scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        scale_color_gradientn(colours = colorspace::heat_hcl(5)) +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        theme(panel.grid.minor = element_blank()) +
+        theme(axis.text.y = element_blank()) +
         labs(x = element_blank(), y = element_blank())
       
-      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0)
+      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.32,1,1,1,1))
       
       conc_plots[[plot_index]] <- conc_plot
       plot_index <- plot_index + 1
@@ -705,11 +709,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
     #scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-HDL (mmol/l)", y = subject_code)
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "fS-HDL (mmol/l)", y = paste0(subject_code, " ", "\nlog-prob."))
   
   conc_plot2 <- ggplot(accepted_intake.df) +
     geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
@@ -718,12 +721,12 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     geom_vline(xintercept = curr_fsldl, linetype="dashed", color = "black", linewidth=0.3) +
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
-    #scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+    scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
+    #scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(axis.text.y = element_blank()) +
     labs(x = "fS-LDL (mmol/l)", y = element_blank())
   
   conc_plot3 <- ggplot(accepted_intake.df) +
@@ -735,10 +738,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
     #scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(axis.text.y = element_blank()) +
     labs(x = "fS-Ins (mmol/l)", y = element_blank())
   
   conc_plot4 <- ggplot(accepted_intake.df) +
@@ -750,10 +753,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
     #scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(axis.text.y = element_blank()) +
     labs(x = "fS-Chol (mmol/l)", y = element_blank())
   
   conc_plot5 <- ggplot(accepted_intake.df) +
@@ -765,13 +768,13 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
     scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
     #scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+    theme(panel.grid.minor = element_blank()) +
+    theme(axis.text.y = element_blank()) +
     labs(x = "fP-Gluc (mmol/l)", y = element_blank())
   
-  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0)
+  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.32,1,1,1,1))
   
   conc_plots[[plot_index]] <- conc_plot
 
