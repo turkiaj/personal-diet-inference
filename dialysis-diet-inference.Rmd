@@ -467,9 +467,9 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (person_id in 1:1) {
+for (person_id in 1:37) {
 
-  person_id <- 2
+  #person_id <- 2
     
   print(paste0("Simulating patient ", person_id))
 
@@ -586,7 +586,7 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
 
@@ -625,79 +625,6 @@ lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay,
   
 ```
 
-
-
-```{r concentration_predictions}
-  library(rstan)
-  library(igraph)
-  library(stringr)
-  
-  source("mebn/v3/MEBNv3.r")
-
-  queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
-  patient_summary <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
-
-  for (subject_id in 1:37) {
-    
-    print(subject_id)
-
-    graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",subject_id)
-    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
-    
-    org_stats <- data.frame(name = subset(dialysis_predictors$Name, dialysis_predictors$Distribution == "Gaussian"))
-    org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
-    org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
-  
-    queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
-    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
-    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
-  
-    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
-    
-    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
-    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
-    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
-    
-    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
-    
-    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
-    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
-    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
-    
-    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
-  
-    quant_limit <- 0.9
-    pk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
-    pk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
-
-    fppi_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
-    fppi_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
-
-    palb_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
-    palb_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
-
-    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
-    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
-    
-    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
-    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
-  
-    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
-    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
-    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
-    
-  }
-  
-  saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
-
-```
 
 ```{r current_levels}
 # Add current levels of intake and concentrations to the data frame
@@ -763,13 +690,13 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/di
 
 
 
-```{r sysdimet_lp_plots-function}
+```{r dialysis_lp_plots-function}
 
-#dialysis_lp_plots <- function(subject_code_vector, plot_path) {
-  
+dialysis_lp_plots <- function(subject_code_vector, plot_path) {
+
   library(ggplot2)
   library(gridExtra)
-  
+
   persons <- length(subject_code_vector)
   
   concinfo.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
@@ -777,145 +704,84 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/di
   simulation <- "X50_B50_A50_I50"
   conc_plots <- vector('list', persons)
   
-  fshdl_scale_min <- min(0.8, concinfo.df$current_fshdl[1:persons])-0.1
-  fshdl_scale_max <- max(2.7, concinfo.df$current_fshdl[1:persons])+0.1
-  fsldl_scale_min <- min(1.2, concinfo.df$current_fsldl[1:persons])-0.1
-  fsldl_scale_max <- max(5.3, concinfo.df$current_fsldl[1:persons])+0.1
-  fsins_scale_min <- min(2.6, concinfo.df$current_fsins[1:persons])-0.1
-  fsins_scale_max <- max(25.0, concinfo.df$current_fsins[1:persons])+0.1
-  fskol_scale_min <- min(2.9, concinfo.df$current_fskol[1:persons])-0.1
-  fskol_scale_max <- max(7.8, concinfo.df$current_fskol[1:persons])+0.1
-  fpgluk_scale_min <- min(4.0, concinfo.df$current_fpgluk[1:persons])-0.1
-  fpgluk_scale_max <- max(6.0, concinfo.df$current_fpgluk[1:persons])+0.1
+  pk_scale_min <- min(3.4, concinfo.df$current_pk[1:persons])-0.1
+  pk_scale_max <- max(4.7, concinfo.df$current_pk[1:persons])+0.1
+  fppi_scale_min <- min(0.9, concinfo.df$current_fppi[1:persons])-0.1
+  fppi_scale_max <- max(1.78, concinfo.df$current_fppi[1:persons])+0.1
+  palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
+  palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
   
   point_size <- 0.5
   
-  #normal_palette <- c("#00337C", "#AADDFF", "#DDFFFF", "#03C988")
-  #failed_palette <- c("#00337C", "#DDDDDD", "#FFDDDD", "#FF6961")
-
-  normal_palette <- "#00BFFF"
-  failed_palette <- "#F44336"
-  low_color <- "#CCCCCC"
-
+  gradient_colors <- colorspace::heat_hcl(3)
   plot_index <- 1
   
   for (subject_code in subject_code_vector[1:(persons-1)]) {
     
       person_id <- concinfo.df[concinfo.df$subject_code == subject_code,]$person_id
-      
-      print(person_id)
-      
-      accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",person_id,".rds"))
+
+      accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",person_id,".rds"))
   
-      # Get personal normal ranges
-      subject_id <- sprintf("S%02d", subject_code)
-      
-      #print(paste0("1. subject_id: ", subject_id))
-      
-      personal_info <- sysdimet[sysdimet$SUBJECT_ID == subject_id & sysdimet$WEEK == 0,]
-      recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
-      
-      fshdl_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-      fsldl_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-      fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
-      fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
-      fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
+      # Get personal normal ranges 
+    
+      personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+      recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
+  
+      pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+      fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+      palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
       
       # Get current personal info and predictions
     
-      curr_fshdl <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fshdl
-      curr_fsldl <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fsldl
-      curr_fsins <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fsins
-      curr_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fskol
-      curr_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fpgluk
+      curr_pk <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_pk
+      curr_fppi <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fppi
+      curr_palb <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_palb
   
-      pred_fshdl <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl
-      pred_fsldl <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl
-      pred_fsins <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins
-      pred_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol
-      pred_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk
-      
-      bound_limit <- 0.98
-      
-      fshdl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_upperbound > bound_limit
-      fsldl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_upperbound > bound_limit
-      fsins_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_upperbound > bound_limit
-      fskol_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_upperbound > bound_limit
-      fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
-      
-      lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
+      pred_pk <- concinfo.df[concinfo.df$subject_code == subject_code,]$pk
+      pred_fppi <- concinfo.df[concinfo.df$subject_code == subject_code,]$fppi
+      pred_palb <- concinfo.df[concinfo.df$subject_code == subject_code,]$palb
       
       conc_plot1 <- ggplot(accepted_intake.df) +
-        geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
-        #geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
-        geom_vline(xintercept = pred_fshdl, linetype="solid", color = "black", linewidth=0.3) +
-        geom_vline(xintercept = curr_fshdl, linetype="dashed", color = "black", linewidth=0.3) +
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
-        scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        geom_point(aes(y=lp, x=pk, color=preference), size = point_size, show.legend = FALSE) +
+        geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
+        geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+        geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=pk_recommendations[1], alpha = .2) + 
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=pk_recommendations[2], xmax=Inf, alpha = .2) + 
+        scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) +
+        scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = subject_code)
-      
+        scale_color_gradientn(colours = gradient_colors) +
+        theme(panel.grid.minor = element_blank()) +
+        labs(x = element_blank(), y = paste0(subject_code, " ", "\nlog-prob."))
+  
       conc_plot2 <- ggplot(accepted_intake.df) +
-        geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
-        #geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
-        geom_vline(xintercept = pred_fsldl, linetype="solid", color = "black", linewidth=0.3) +
-        geom_vline(xintercept = curr_fsldl, linetype="dashed", color = "black", linewidth=0.3) +
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
-        scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+        geom_point(aes(y=lp, x=fppi, color=preference), size = point_size, show.legend = FALSE) +
+        geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+        geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+        geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fppi_recommendations[1], alpha = .2) + 
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fppi_recommendations[2], xmax=Inf, alpha = .2) + 
+        scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
+        scale_color_gradientn(colours = gradient_colors) +
         theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = element_blank())
-  
-      conc_plot3 <- ggplot(accepted_intake.df) +
-        geom_point(aes(y=lp, x=fsins, color=preference), size = point_size, show.legend = FALSE) +
-        #geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-        geom_vline(xintercept = pred_fsins, linetype="solid", color = "black", linewidth=0.3) +
-        geom_vline(xintercept = curr_fsins, linetype="dashed", color = "black", linewidth=0.3) +
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
-        scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = element_blank())
-  
-      conc_plot4 <- ggplot(accepted_intake.df) +
-        geom_point(aes(y=lp, x=fskol, color=preference), size = point_size, show.legend = FALSE) +
-        #geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-        geom_vline(xintercept = pred_fskol, linetype="solid", color = "black", linewidth=0.3) +
-        geom_vline(xintercept = curr_fskol, linetype="dashed", color = "black", linewidth=0.3) +
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
-        scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-        labs(x = element_blank(), y = element_blank())
-  
-      conc_plot5 <- ggplot(accepted_intake.df) +
-        geom_point(aes(y=lp, x=fpgluk, color=preference), size = point_size, show.legend = FALSE) +
-        #geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-        geom_vline(xintercept = pred_fpgluk, linetype="solid", color = "black", linewidth=0.3) +
-        geom_vline(xintercept = curr_fpgluk, linetype="dashed", color = "black", linewidth=0.3) +
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
-        annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
-        scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-        scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-        theme_bw() +
-        theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+        theme(panel.grid.minor = element_blank()) +
         labs(x = element_blank(), y = element_blank())
       
-      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0)
+      conc_plot3 <- ggplot(accepted_intake.df) +
+        geom_point(aes(y=lp, x=palb, color=preference), size = point_size, show.legend = FALSE) +
+        geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+        geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+        geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=palb_recommendations[1], alpha = .2) + 
+        annotate("rect",ymin=-Inf, ymax=Inf, xmin=palb_recommendations[2], xmax=Inf, alpha = .2) + 
+        scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
+        scale_color_gradientn(colours = gradient_colors) +
+        theme_bw() +
+        theme(panel.grid.minor = element_blank()) +
+        labs(x = element_blank(), y = element_blank())
+
+      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.32,1,1))
       
       conc_plots[[plot_index]] <- conc_plot
       plot_index <- plot_index + 1
@@ -924,121 +790,64 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/di
   subject_code <- subject_code_vector[[persons]]
   person_id <- concinfo.df[concinfo.df$subject_code == subject_code,]$person_id
   
-  #print(paste0("2. person_id: ", person_id))
-
-  accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+  accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
   
-  # Get personal normal ranges
-  subject_id <- sprintf("S%02d", subject_code)
-  personal_info <- sysdimet[sysdimet$SUBJECT_ID == subject_id & sysdimet$WEEK == 0,]
-  recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
+  # Get personal normal ranges 
   
-  fshdl_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-  fsldl_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-  fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
-  fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
-  fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
+  personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
   
-  # Get current personal info and predictions
-  
-  curr_fshdl <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fshdl
-  curr_fsldl <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fsldl
-  curr_fsins <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fsins
-  curr_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fskol
-  curr_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fpgluk
-  
-  pred_fshdl <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl
-  pred_fsldl <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl
-  pred_fsins <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins
-  pred_fskol <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol
-  pred_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk
-
-  fshdl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fshdl_upperbound > bound_limit
-  fsldl_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsldl_upperbound > bound_limit
-  fsins_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fsins_upperbound > bound_limit
-  fskol_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fskol_upperbound > bound_limit
-  fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
-  
-  lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
-
+  pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+  fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+  palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+      
   conc_plot1 <- ggplot(accepted_intake.df) +
-    geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
-    #geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
-    geom_vline(xintercept = pred_fshdl, linetype="solid", color = "black", linewidth=0.3) +
-    geom_vline(xintercept = curr_fshdl, linetype="dashed", color = "black", linewidth=0.3) +
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fshdl_scale_min, fshdl_scale_max), breaks=fshdl_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fshdl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    geom_point(aes(y=lp, x=pk, color=preference), size = point_size, show.legend = FALSE) +
+    geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+    geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=pk_recommendations[1], alpha = .2) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=pk_recommendations[2], xmax=Inf, alpha = .2) + 
+    scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) + 
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-HDL (mmol/l)", y = subject_code)
-  
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "P-K (mmol/l)", y = paste0(subject_code, " ", "\nlog-prob."))
+
   conc_plot2 <- ggplot(accepted_intake.df) +
-    geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
-    #geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
-    geom_vline(xintercept = pred_fsldl, linetype="solid", color = "black", linewidth=0.3) +
-    geom_vline(xintercept = curr_fsldl, linetype="dashed", color = "black", linewidth=0.3) +
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsldl_recommendations[1], alpha = .2) + 
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsldl_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fsldl_scale_min, fsldl_scale_max), breaks=fsldl_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fsldl_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    geom_point(aes(y=lp, x=fppi, color=preference), size = point_size, show.legend = FALSE) +
+    geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+    geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fppi_recommendations[1], alpha = .2) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fppi_recommendations[2], xmax=Inf, alpha = .2) + 
+    scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-LDL (mmol/l)", y = element_blank())
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "fP-Pi (mmol/l)", y = element_blank())
   
   conc_plot3 <- ggplot(accepted_intake.df) +
-    geom_point(aes(y=lp, x=fsins, color=preference), size = point_size, show.legend = FALSE) +
-    #geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-    geom_vline(xintercept = pred_fsins, linetype="solid", color = "black", linewidth=0.3) +
-    geom_vline(xintercept = curr_fsins, linetype="dashed", color = "black", linewidth=0.3) +
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fsins_recommendations[1], alpha = .2) + 
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fsins_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fsins_scale_min, fsins_scale_max), breaks=fsins_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fsins_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
+    geom_point(aes(y=lp, x=palb, color=preference), size = point_size, show.legend = FALSE) +
+    geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+    geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=palb_recommendations[1], alpha = .2) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=palb_recommendations[2], xmax=Inf, alpha = .2) + 
+    scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
+    scale_color_gradientn(colours = gradient_colors) +
     theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-Ins (mmol/l)", y = element_blank())
+    theme(panel.grid.minor = element_blank()) +
+    labs(x = "P-Alb (mmol/l)", y = element_blank())
   
-  conc_plot4 <- ggplot(accepted_intake.df) +
-    geom_point(aes(y=lp, x=fskol, color=preference), size = point_size, show.legend = FALSE) +
-    #geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-    geom_vline(xintercept = pred_fskol, linetype="solid", color = "black", linewidth=0.3) +
-    geom_vline(xintercept = curr_fskol, linetype="dashed", color = "black", linewidth=0.3) +
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fskol_recommendations[1], alpha = .2) + 
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fskol_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fskol_scale_min, fskol_scale_max), breaks=fskol_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fskol_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fS-Chol (mmol/l)", y = element_blank())
-  
-  conc_plot5 <- ggplot(accepted_intake.df) +
-    geom_point(aes(y=lp, x=fpgluk, color=preference), size = point_size, show.legend = FALSE) +
-    #geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
-    geom_vline(xintercept = pred_fpgluk, linetype="solid", color = "black", linewidth=0.3) +
-    geom_vline(xintercept = curr_fpgluk, linetype="dashed", color = "black", linewidth=0.3) +
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fpgluk_recommendations[1], alpha = .2) + 
-    annotate("rect",ymin=-Inf, ymax=Inf, xmin=fpgluk_recommendations[2], xmax=Inf, alpha = .2) + 
-    scale_x_continuous(limits=c(fpgluk_scale_min, fpgluk_scale_max), breaks=fpgluk_recommendations) +
-    scale_colour_gradient2(low=low_color, high=if (fpgluk_accepted) normal_palette else failed_palette, midpoint=lp_midpoint) +
-    theme_bw() +
-    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-    theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-    labs(x = "fP-Gluc (mmol/l)", y = element_blank())
-  
-  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0)
-  
+  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.32,1,1))
+    
   conc_plots[[plot_index]] <- conc_plot
 
-  full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, plot_index),1.3))
-  #full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0)
+  full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, persons-1),1.15))
   
   ggsave(plot_path, plot = full_conc_plot)
+  
 }
 
 ```
@@ -1078,15 +887,10 @@ dailysis_with_failed_concs <- concinfo.df %>%
          current_palb < palb_min | current_palb > palb_max) %>%
   select(subject_code)
 
-# 32 of 37 dialysis patients have their concentrations currently outside the normal ranges
+# plot just 7 of 32 that have failed concs
+dailysis_with_failed_concs <- dailysis_with_failed_concs[1:7,]
 
-length(dailysis_with_failed_concs$subject_code)
-
-#TODO: plot
-
-# Alla on toimiva plotti.. muuta vaan värejä sysdimetin mukaiseksi ja tee siitä funktio
-
-#dialysis_lp_plots(dailysis_with_failed_concs$subject_code, "figures/dialysis_fixed_concentrations.pdf")
+dialysis_lp_plots(dailysis_with_failed_concs, "figures/dialysis_fixed_concentrations.pdf")
 
 ```
 
@@ -1515,5 +1319,80 @@ for (person_id in 1:37) {
         guides(colour = guide_colorbar(title = "Probability % of reaching target concentrations", title.theme = element_text(size=8), label.theme = element_text(size=6), title.position = "top", barwidth = unit(80,"mm"))) 
     
       intake_plot
+```
+
+
+## TRASHCAN
+
+```{r concentration_predictions}
+  library(rstan)
+  library(igraph)
+  library(stringr)
+  
+  source("mebn/v3/MEBNv3.r")
+
+  queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
+  patient_summary <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary.rds")
+
+  for (subject_id in 1:37) {
+    
+    print(subject_id)
+
+    graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",subject_id)
+    reaction_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+    
+    org_stats <- data.frame(name = subset(dialysis_predictors$Name, dialysis_predictors$Distribution == "Gaussian"))
+    org_stats$mean <- sapply(org_stats$name, function(x) mean(dialysis[[x]]))
+    org_stats$sd <- sapply(org_stats$name, function(x) sd(dialysis[[x]]))
+  
+    queried_nodes <- dialysis_datadesc[dialysis_datadesc$Condition >= 100,]$Name
+    queried_nodes_lCI <- paste0(queried_nodes,"_lCI")
+    queried_nodes_uCI <- paste0(queried_nodes,"_uCI")
+  
+    params <- mebn.extract_parameters_from_graph(reaction_graph, beta_point_est = "mean", param_point_est = "mean", X_point_est = "mean", queried_nodes = queried_nodes)
+    
+    Q_values <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes))
+    Q_values_lCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_lCI))
+    Q_values_uCI <- patient_summary %>% filter(person_id == subject_id) %>% select(all_of(queried_nodes_uCI))
+    
+    Q_values_norm <- (as.numeric(Q_values) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_lCI_norm <- (as.numeric(Q_values_lCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    Q_values_uCI_norm <- (as.numeric(Q_values_uCI) - org_stats[org_stats$name == colnames(Q_values),]$mean) / org_stats[org_stats$name == colnames(Q_values),]$sd
+    
+    pk_mu <- params$intercept_point[1] + params$X_evidence_point %*% params$X_beta_point[1,] + Q_values_norm %*% params$Q_beta_point[1,]
+    fppi_mu <- params$intercept_point[2] + params$X_evidence_point %*% params$X_beta_point[2,] + Q_values_norm %*% params$Q_beta_point[2,]
+    palb_mu <- params$intercept_point[3] + params$X_evidence_point %*% params$X_beta_point[3,] + Q_values_norm %*% params$Q_beta_point[3,]
+    
+    resulting_conc_mu <- c(pk_mu,fppi_mu,palb_mu)
+  
+    quant_limit <- 0.9
+    pk_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+    pk_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[1], rate=params$alpha_point[1]/pk_mu)
+
+    fppi_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+    fppi_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[2], rate=params$alpha_point[2]/fppi_mu)
+
+    palb_mu_lCI <- qgamma(1-quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+    palb_mu_uCI <- qgamma(quant_limit, shape=params$alpha_point[3], rate=params$alpha_point[3]/palb_mu)
+
+    resulting_conc_mu_lCI <- c(pk_mu_lCI,fppi_mu_lCI,palb_mu_lCI)
+    resulting_conc_mu_uCI <- c(pk_mu_uCI,fppi_mu_uCI,palb_mu_uCI)
+    
+    patient_summary[patient_summary$person_id == subject_id,]$pk <- pk_mu
+    patient_summary[patient_summary$person_id == subject_id,]$pk_lCI <- pk_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$pk_uCI <- pk_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$fppi <- fppi_mu
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_lCI <- fppi_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$fppi_uCI <- fppi_mu_uCI
+  
+    patient_summary[patient_summary$person_id == subject_id,]$palb <- palb_mu
+    patient_summary[patient_summary$person_id == subject_id,]$palb_lCI <- palb_mu_lCI
+    patient_summary[patient_summary$person_id == subject_id,]$palb_uCI <- palb_mu_uCI
+    
+  }
+  
+  saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds.rds"))
+
 ```
 
