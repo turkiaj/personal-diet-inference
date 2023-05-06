@@ -501,7 +501,10 @@ for (person_id in 1:37) {
                            param_point_est = "mean",
                            X_point_est = "mean",
                            posterior_samples = 500,
-                           repeat_only = 0)
+                           repeat_only = 0,
+                           l1 = 5,
+                           l2 = 5,
+                           l3 = 100)
   
   # Extract all the samples and correlate concentrations and intake with proposal ids
   result <- rstan::extract(intake_model)

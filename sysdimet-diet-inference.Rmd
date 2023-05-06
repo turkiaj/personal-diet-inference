@@ -277,7 +277,10 @@ for (person_id in 1:length(kontrolli)) {
                            param_point_est = "mean",
                            X_point_est = "mean",
                            posterior_samples = 500,
-                           repeat_only = 0)
+                           repeat_only = 0,
+                           l1 = 2,
+                           l2 = 5,
+                           l3 = 100)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -526,6 +529,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   mid_color <- "#FFFFFF"
   low_color <- "#F44336"
 
+  gradient_colors <- colorspace::heat_hcl(3)
   plot_index <- 1
   
   for (subject_code in subject_code_vector[1:(persons-1)]) {
@@ -573,8 +577,6 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       fpgluk_accepted <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_lowerbound > bound_limit & concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk_upperbound > bound_limit
       
       lp_midpoint <- mean(accepted_intake.df$lp)
-      
-      gradient_colors <- colorspace::heat_hcl(3)
       
       conc_plot1 <- ggplot(accepted_intake.df) +
         geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
