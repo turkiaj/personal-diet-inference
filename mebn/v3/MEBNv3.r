@@ -3649,7 +3649,7 @@ mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, p
   return(params)
 }
 
-mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 1, l2 = 10, l3 = 100)
+mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 10, l2 = 100, l3 = 1)
 {
   library(rstan)
   library(igraph)
@@ -3857,9 +3857,9 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Q_beta_point <- Q_beta_point
                      linear_transformation <- offset_value
                      
-                     preference_strength <- l1
-                     bound_steepness <- l2
-                     bound_requirement <- l3
+                     preference_strength <- l3
+                     bound_steepness <- l1
+                     bound_requirement <- l2
                      
                      posterior_samples <- posterior_samples
                    })

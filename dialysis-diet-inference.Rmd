@@ -503,8 +503,8 @@ for (person_id in 1:37) {
                            posterior_samples = 500,
                            repeat_only = 0,
                            l1 = 5,
-                           l2 = 5,
-                           l3 = 100)
+                           l2 = 100,
+                           l3 = 1)
   
   # Extract all the samples and correlate concentrations and intake with proposal ids
   result <- rstan::extract(intake_model)
@@ -585,14 +585,6 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
   
-}
-
-colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
-
-saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
-
-# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions. 
-
 ```
 
 ```{r fig.height=8, inference_debug}
@@ -692,7 +684,7 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/di
 ```
 
 
-
+#dialysis_lp_plots
 ```{r dialysis_lp_plots-function}
 
 dialysis_lp_plots <- function(subject_code_vector, plot_path) {
@@ -784,7 +776,7 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
         theme(panel.grid.minor = element_blank()) +
         labs(x = element_blank(), y = element_blank())
 
-      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.32,1,1))
+      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.1,1,1))
       
       conc_plots[[plot_index]] <- conc_plot
       plot_index <- plot_index + 1
@@ -843,7 +835,7 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
     theme(panel.grid.minor = element_blank()) +
     labs(x = "P-Alb (mmol/l)", y = element_blank())
   
-  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.32,1,1))
+  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.1,1,1))
     
   conc_plots[[plot_index]] <- conc_plot
 
@@ -855,7 +847,7 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
 
 ```
 
-
+#dialysis_lp_article_plot
 ```{r dialysis_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=9, fig.keep='last'}
 source("mebn/v3/MEBNv3.r")
 

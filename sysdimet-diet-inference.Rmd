@@ -278,9 +278,9 @@ for (person_id in 1:length(kontrolli)) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0,
-                           l1 = 2,
-                           l2 = 5,
-                           l3 = 100)
+                           l1 = 5,
+                           l2 = 100,
+                           l3 = 2)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -494,6 +494,7 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sy
 
 ```
 
+#sysdimet_lp_plots
 ```{r sysdimet_lp_plots-function}
 
 sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
@@ -656,7 +657,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         theme(axis.text.y = element_blank()) +
         labs(x = element_blank(), y = element_blank())
       
-      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.32,1,1,1,1))
+      conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.4,1,1,1,1))
       
       conc_plots[[plot_index]] <- conc_plot
       plot_index <- plot_index + 1
@@ -776,11 +777,11 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
     theme(axis.text.y = element_blank()) +
     labs(x = "fP-Gluc (mmol/l)", y = element_blank())
   
-  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.32,1,1,1,1))
+  conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, ncol=5, padding=0, widths=c(1.4,1,1,1,1))
   
   conc_plots[[plot_index]] <- conc_plot
 
-  full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, plot_index),1.3))
+  full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, plot_index-1),1.1))
   #full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0)
   
   ggsave(plot_path, plot = full_conc_plot)
@@ -788,6 +789,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 ```
 
+#sysdimet_lp_article_plot
 ```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=9, fig.keep='last'}
 source("mebn/v3/MEBNv3.r")
 
