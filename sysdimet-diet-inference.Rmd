@@ -848,6 +848,7 @@ sysdimet_lp_plots(kontrolli_group$subject_code[16:34], "figures/sysdimet_concent
 
 ```
 
+# Intake recommendation
 
 ```{r result_plot_for_all_in_kontrolli}
 # Visualize the main results
@@ -898,7 +899,7 @@ recommendation_table.df <- intake.df %>%
                                               "\\right]}}$"), 
                                               align="c"),
                                             .names = "{.col}")) %>%
-                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold"), "subject_code"))
+                              select(c("subject_code", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold"), "subject_code"))
 
 # Render PDF table and keep .tex 
 
@@ -933,21 +934,22 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
     kable_styling(latex_options="scale_down") %>%  
     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
    row_spec(0,bold=TRUE) %>%
-   column_spec(2, color = fixed_concs.df[,17], bold = fixed_concs.df[,32]) %>%
-   column_spec(3, color = fixed_concs.df[,18], bold = fixed_concs.df[,33]) %>%
-   column_spec(4, color = fixed_concs.df[,19], bold = fixed_concs.df[,34]) %>%
-   column_spec(5, color = fixed_concs.df[,20], bold = fixed_concs.df[,35]) %>%
-   column_spec(6, color = fixed_concs.df[,21], bold = fixed_concs.df[,36]) %>%
-   column_spec(7, color = fixed_concs.df[,22], bold = fixed_concs.df[,37]) %>%
-   column_spec(8, color = fixed_concs.df[,23], bold = fixed_concs.df[,38]) %>%
-   column_spec(9, color = fixed_concs.df[,24], bold = fixed_concs.df[,39]) %>%
-   column_spec(10, color = fixed_concs.df[,25], bold = fixed_concs.df[,40]) %>%
-   column_spec(11, color = fixed_concs.df[,26], bold = fixed_concs.df[,41]) %>%
-   column_spec(12, color = fixed_concs.df[,27], bold = fixed_concs.df[,42]) %>%
-   column_spec(13, color = fixed_concs.df[,28], bold = fixed_concs.df[,43]) %>%
-   column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44]) %>%
-   column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45]) %>%
-   column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46]) %>%
+   column_spec(1, color = "#000000") %>%
+   column_spec(2, color = fixed_concs.df[,17], bold = fixed_concs.df[,32], underline = fixed_concs.df[,17] == up_color) %>%
+   column_spec(3, color = fixed_concs.df[,18], bold = fixed_concs.df[,33], underline = fixed_concs.df[,18] == up_color) %>%
+   column_spec(4, color = fixed_concs.df[,19], bold = fixed_concs.df[,34], underline = fixed_concs.df[,19] == up_color) %>%
+   column_spec(5, color = fixed_concs.df[,20], bold = fixed_concs.df[,35], underline = fixed_concs.df[,20] == up_color) %>%
+   column_spec(6, color = fixed_concs.df[,21], bold = fixed_concs.df[,36], underline = fixed_concs.df[,21] == up_color) %>%
+   column_spec(7, color = fixed_concs.df[,22], bold = fixed_concs.df[,37], underline = fixed_concs.df[,22] == up_color) %>%
+   column_spec(8, color = fixed_concs.df[,23], bold = fixed_concs.df[,38], underline = fixed_concs.df[,23] == up_color) %>%
+   column_spec(9, color = fixed_concs.df[,24], bold = fixed_concs.df[,39], underline = fixed_concs.df[,24] == up_color) %>%
+   column_spec(10, color = fixed_concs.df[,25], bold = fixed_concs.df[,40], underline = fixed_concs.df[,25] == up_color) %>%
+   column_spec(11, color = fixed_concs.df[,26], bold = fixed_concs.df[,41], underline = fixed_concs.df[,26] == up_color) %>%
+   column_spec(12, color = fixed_concs.df[,27], bold = fixed_concs.df[,42], underline = fixed_concs.df[,27] == up_color) %>%
+   column_spec(13, color = fixed_concs.df[,28], bold = fixed_concs.df[,43], underline = fixed_concs.df[,28] == up_color) %>%
+   column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44], underline = fixed_concs.df[,29] == up_color) %>%
+   column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45], underline = fixed_concs.df[,30] == up_color) %>%
+   column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46], underline = fixed_concs.df[,31] == up_color) %>%
    save_kable(file = "tables/sysdimet_fixed_intake.pdf", keep_tex = TRUE)
 
 ```

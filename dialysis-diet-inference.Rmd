@@ -1036,7 +1036,7 @@ ggsave(paste0("figures/dialysis_concentrations.pdf"), plot = full_conc_plot)
 
 ```
 
-
+# Intake recommendation
 
 ```{r result_plot}
 # Visualize the main results
@@ -1051,8 +1051,9 @@ recommendation <- colnames(intake.df)[4:(4+12)]
 cond_nutrients <- dialysis_predictors[dialysis_predictors$Condition >= 100,]
 table_colnames <- c("", cond_nutrients$ShortDescription)
 
-up_color <- "#F8766D"
+up_color <- "#C23B22"
 down_color <- "#00BFC4"
+down_color <- "#3A5874"
 keep_color <- "#000000"
   
 recommendation_table.df <- intake.df %>%
@@ -1086,7 +1087,7 @@ recommendation_table.df <- intake.df %>%
                                               "\\right]}}$"), 
                                               align="c"),
                                             .names = "{.col}")) %>%
-                              select(c("person_id", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
+                              select(c("subject_code", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
 
 # Render PDF table and keep .tex 
 
@@ -1096,19 +1097,20 @@ kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T,
     kable_styling(latex_options="scale_down") %>%  
     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
    row_spec(0,bold=TRUE) %>%
-   column_spec(2, color = recommendation_table.df[,15], bold = recommendation_table.df[,28]) %>%
-   column_spec(3, color = recommendation_table.df[,16], bold = recommendation_table.df[,29]) %>%
-   column_spec(4, color = recommendation_table.df[,17], bold = recommendation_table.df[,30]) %>%
-   column_spec(5, color = recommendation_table.df[,18], bold = recommendation_table.df[,31]) %>%
-   column_spec(6, color = recommendation_table.df[,19], bold = recommendation_table.df[,32]) %>%
-   column_spec(7, color = recommendation_table.df[,20], bold = recommendation_table.df[,33]) %>%
-   column_spec(8, color = recommendation_table.df[,21], bold = recommendation_table.df[,34]) %>%
-   column_spec(9, color = recommendation_table.df[,22], bold = recommendation_table.df[,35]) %>%
-   column_spec(10, color = recommendation_table.df[,23], bold = recommendation_table.df[,36]) %>%
-   column_spec(11, color = recommendation_table.df[,24], bold = recommendation_table.df[,37]) %>%
-   column_spec(12, color = recommendation_table.df[,25], bold = recommendation_table.df[,38]) %>%
-   column_spec(13, color = recommendation_table.df[,26], bold = recommendation_table.df[,39]) %>%
-   column_spec(14, color = recommendation_table.df[,27], bold = recommendation_table.df[,40]) %>%
+   column_spec(1, color = "#000000") %>%
+   column_spec(2, color = recommendation_table.df[,15], bold = recommendation_table.df[,28], underline = recommendation_table.df[,15] == up_color) %>%
+   column_spec(3, color = recommendation_table.df[,16], bold = recommendation_table.df[,29], underline = recommendation_table.df[,16] == up_color) %>%
+   column_spec(4, color = recommendation_table.df[,17], bold = recommendation_table.df[,30], underline = recommendation_table.df[,17] == up_color) %>%
+   column_spec(5, color = recommendation_table.df[,18], bold = recommendation_table.df[,31], underline = recommendation_table.df[,18] == up_color) %>%
+   column_spec(6, color = recommendation_table.df[,19], bold = recommendation_table.df[,32], underline = recommendation_table.df[,19] == up_color) %>%
+   column_spec(7, color = recommendation_table.df[,20], bold = recommendation_table.df[,33], underline = recommendation_table.df[,20] == up_color) %>%
+   column_spec(8, color = recommendation_table.df[,21], bold = recommendation_table.df[,34], underline = recommendation_table.df[,21] == up_color) %>%
+   column_spec(9, color = recommendation_table.df[,22], bold = recommendation_table.df[,35], underline = recommendation_table.df[,22] == up_color) %>%
+   column_spec(10, color = recommendation_table.df[,23], bold = recommendation_table.df[,36], underline = recommendation_table.df[,23] == up_color) %>%
+   column_spec(11, color = recommendation_table.df[,24], bold = recommendation_table.df[,37], underline = recommendation_table.df[,24] == up_color) %>%
+   column_spec(12, color = recommendation_table.df[,25], bold = recommendation_table.df[,38], underline = recommendation_table.df[,25] == up_color) %>%
+   column_spec(13, color = recommendation_table.df[,26], bold = recommendation_table.df[,39], underline = recommendation_table.df[,26] == up_color) %>%
+   column_spec(14, color = recommendation_table.df[,27], bold = recommendation_table.df[,40], underline = recommendation_table.df[,27] == up_color) %>%
    save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
 
 ```
