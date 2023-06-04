@@ -954,6 +954,85 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
 
 ```
 
+```{r result_plot_for_all_in_kontrolli_change}
+# Visualize the main results
+library(tibble)
+library(dplyr)
+
+intake.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+recommendation <- colnames(intake.df)[4:(4+14)]
+
+#columns_with_icons <- c("person_id", (rbind(paste0(recommendation, "_icon"), recommendation)))
+
+cond_nutrients <- sysdimet_predictors[sysdimet_predictors$Condition >= 100,]
+table_colnames <- c("", cond_nutrients$ShortDescription)
+
+up_color <- "#C23B22"
+down_color <- "#00BFC4"
+down_color <- "#3A5874"
+keep_color <- "#000000"
+  
+recommendation_table.df <- intake.df %>%
+                              # Recommendation cell coloring conditional on difference from current value
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~case_when(
+                                               get(glue::glue("current_{cur_column()}")) < .x ~ up_color,
+                                               get(glue::glue("current_{cur_column()}"))  > .x ~ down_color,
+                                               get(glue::glue("current_{cur_column()}"))  == .x ~ keep_color,
+                                            ),
+                                            .names = "{.col}_color")) %>%
+                              # Cell bolding conditional on amount of the difference (30%)
+                              mutate(across(.cols = recommendation,
+                                            .fns = ~case_when(
+                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) > 30 ~ TRUE,
+                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) < 30 ~ FALSE,
+                                            ),
+                                            .names = "{.col}_bold")) %>%
+                              # Round, format and paste as multiline-string with CI
+                              mutate(across(.cols = all_of(recommendation),
+                                            .fns = ~linebreak(paste0(
+                                              "${_{",
+                                              format(round(get(glue::glue("current_{cur_column()}")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
+                                              "\\rightarrow}}$ \n",
+                                              format(round(.x, cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
+                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals)
+                                              ), 
+                                              align="c"),
+                                            .names = "{.col}")) %>%
+                              select(c("subject_code", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold"), "subject_code"))
+
+# Render PDF table and keep .tex 
+
+fixed_concs.df <- recommendation_table.df[recommendation_table.df$subject_code %in% subjects_with_failed_concs$subject_code,]
+
+kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",16)), 
+   col.names = table_colnames,
+   caption = "Personally recommended intake (RI) for Sysdimet study subjects with lower and upper limits of recommendations.") %>%
+    kable_styling(latex_options="scale_down") %>%  
+    kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+   row_spec(0,bold=TRUE) %>%
+   column_spec(1, color = "#000000") %>%
+   column_spec(2, color = fixed_concs.df[,17], bold = fixed_concs.df[,32], underline = fixed_concs.df[,17] == FALSE) %>%
+   column_spec(3, color = fixed_concs.df[,18], bold = fixed_concs.df[,33], underline = fixed_concs.df[,18] == FALSE) %>%
+   column_spec(4, color = fixed_concs.df[,19], bold = fixed_concs.df[,34], underline = fixed_concs.df[,19] == FALSE) %>%
+   column_spec(5, color = fixed_concs.df[,20], bold = fixed_concs.df[,35], underline = fixed_concs.df[,20] == FALSE) %>%
+   column_spec(6, color = fixed_concs.df[,21], bold = fixed_concs.df[,36], underline = fixed_concs.df[,21] == FALSE) %>%
+   column_spec(7, color = fixed_concs.df[,22], bold = fixed_concs.df[,37], underline = fixed_concs.df[,22] == FALSE) %>%
+   column_spec(8, color = fixed_concs.df[,23], bold = fixed_concs.df[,38], underline = fixed_concs.df[,23] == FALSE) %>%
+   column_spec(9, color = fixed_concs.df[,24], bold = fixed_concs.df[,39], underline = fixed_concs.df[,24] == FALSE) %>%
+   column_spec(10, color = fixed_concs.df[,25], bold = fixed_concs.df[,40], underline = fixed_concs.df[,25] == FALSE) %>%
+   column_spec(11, color = fixed_concs.df[,26], bold = fixed_concs.df[,41], underline = fixed_concs.df[,26] == FALSE) %>%
+   column_spec(12, color = fixed_concs.df[,27], bold = fixed_concs.df[,42], underline = fixed_concs.df[,27] == FALSE) %>%
+   column_spec(13, color = fixed_concs.df[,28], bold = fixed_concs.df[,43], underline = fixed_concs.df[,28] == FALSE) %>%
+   column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44], underline = fixed_concs.df[,29] == FALSE) %>%
+   column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45], underline = fixed_concs.df[,30] == FALSE) %>%
+   column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46], underline = fixed_concs.df[,31] == FALSE) %>%
+   save_kable(file = "tables/recommendations_sysdimet_change.pdf", keep_tex = TRUE)
+
+```
+
 # TRASHCAN
 
 ```{r concentration_predictions}
