@@ -107,6 +107,8 @@ plot(initial_graph,
 ```
 
 ```{r graph_with_gamma_qr_mv3_full, echo=TRUE, eval=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+source("mebn/v3/MEBNv3.r")
+
 initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
 
 no_holdout <- rep(0, nrow(sysdimet))
@@ -126,6 +128,26 @@ sysdimet_multivariate <- mebn.bipartite_multivariate(reaction_graph = initial_gr
 write.graph(sysdimet_multivariate, "graphs/sysdimet_gamma_qr_mv.graphml", "graphml")
 ```
 
+```{r}
+# Model diagnostics
+library(rstan)
+multivariate_model_name <- paste0(sysdimet_targets$Name, collapse = "_")
+
+target_blmm <- mebn.get_localfit(multivariate_model_name, "models/sysdimet/BLMM_gamma_qr_mv")
+
+stan_diag(target_blmm)
+stan_rhat(target_blmm)
+
+sumstats <- summary(target_blmm)
+
+eff <- na.omit(sumstats$summary[,9])
+c(min(eff),mean(eff),max(eff)) # 250.231  4726.991 13476.071
+
+rhat <- na.omit(sumstats$summary[,10])
+c(min(rhat),mean(rhat),max(rhat)) # 0.9990149 1.0000900 1.0125630
+
+```
+
 
 ```{r sysdimet_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where the concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
 
@@ -142,6 +164,7 @@ source("mebn/v3/MEBNv3.r")
 
 # - latent parameters from this model
 latent_parameter_modeldir <- "models/sysdimet/BLMM_gamma_qr_mv"
+#latent_parameter_modeldir <- "models/sysdimet/BLMM_gamma_qr_mv/noncentered"
 
 # - use these predictors and targets
 target_variables <- sysdimet_targets
@@ -151,7 +174,8 @@ graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
 
 patients <- levels(sysdimet$SUBJECT_ID)
 
-for (person_id in 62:length(patients)) {
+#for (person_id in 62:length(patients)) {
+for (person_id in 1:length(patients)) {
   
   # - initial graph structure
   initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
@@ -238,8 +262,8 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-for (person_id in 1:length(kontrolli)) {
-#for (person_id in 1:1) {
+#for (person_id in 1:length(kontrolli)) {
+for (person_id in 1:1) {
 
   #person_id <- 21
   
@@ -261,7 +285,7 @@ for (person_id in 1:length(kontrolli)) {
   
   # Sample diet proposals and matching concentration predictions
 
-  #source("mebn/v3/MEBNv3.r")
+  source("mebn/v3/MEBNv3.r")
 
   intake_model <- mebn.Query(reaction_graph = personal_graph,
                            graph_dir = personal_model_dir,
@@ -278,9 +302,10 @@ for (person_id in 1:length(kontrolli)) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0,
-                           l1 = 5,
-                           l2 = 100,
-                           l3 = 2)
+                           l1 = 10,
+                           l2 = 10,
+                           l3 = 70,
+                           mix = 0.5)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -369,8 +394,56 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
+#intake_model
+```
+
+
+
+```{r}
+
+ggplot(as.data.frame(result)) +
+  geom_point(aes(y=in_range*preference, x=in_concentration_range, color=lp__), show.legend=FALSE) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+mean(intake_proposals.df$dvit)  
+
+max(result$lp) # -73... -33 (normal l3)
+mean(result$l3)
+max(result$in_concentration_range) # -23, -35
+
+plot(result$softbound_sum, result$in_range)
+
+plot(result$in_concentration_range, result$in_range)
+plot(result$softbound_sum, result$in_range)
+
+hist(result$in_range)
+
+#plot(result$preference, result$preference_error_sum)
+
+#####
+
+x <- result$softbound_sum
+
+#calculate normal CDF probabilities
+prob <- pnorm(x, mean = 10, sd = 5, lower.tail = TRUE)
+prob <- pnorm(x, mean = 10, sd = 1)
+x <- seq(-10,1,0.01)
+
+x <- result$softbound_sum - 9
+
+inv_logit = function(x) {
+  1 / (1 + exp(-x))
+}
+
+y <- inv_logit(x*5)
+
+plot(x, y)
+
+result$Y_bound
+
 
 ```
+
 
 ```{r fig.height=8, inference_debug}
 
@@ -380,11 +453,11 @@ fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded
 fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
 fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
 
-#recommendation_intake.df <- intake_proposals.df 
+recommendation_intake.df <- intake_proposals.df 
 
-recommendation_intake.df <- intake_proposals.df %>%
-  filter(boundsum >= 2 * nrow(assumedtargets) - 0.5) %>%
-  as.data.frame()
+#recommendation_intake.df <- intake_proposals.df %>%
+#  filter(boundsum >= 2 * nrow(assumedtargets) - 0.3) %>%
+#  as.data.frame()
 
 conc_plot1 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fshdl, color=preference), show.legend=FALSE) +
@@ -420,12 +493,45 @@ lay <- rbind(c(1),
 
 lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 
-ldl <- mean(recommendation_intake.df$fsldl)
+```
 
-df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
-df[c("subject_code", "fsldl")]
 
+```{r}
+
+ggplot(recommendation_intake.df) +
+  geom_point(aes(y=fshdl, x=dvit, color=boundsum), show.legend=FALSE) +
+  geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
   
+
+```
+
+
+
+```{r}
+library(rstan)
+library(ggplot2)
+
+rstan_options (auto_write=TRUE)
+options (mc.cores=parallel::detectCores ()) 
+
+data_list <- within(list(),
+{
+    y_mean = 20
+    y_sd = 10
+    x_preferred = 15
+    x_sd = 0.5
+})
+                  
+stan_model <- stan(file="mebn/joint_density_demo.stan",model_name="demo", warmup = 500, iter=1000, chains=4, data=data_list, seed=483892929)
+
+result <- rstan::extract(stan_model)
+df <- as.data.frame(result)
+
+ggplot(df, aes(x=lp__)) +
+  geom_density(color="darkblue", fill="lightblue")
+
+
 ```
 
 ```{r current_levels}
@@ -668,7 +774,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   
   #print(paste0("2. person_id: ", person_id))
 
-  accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
+  accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",person_id,".rds"))
   
   # Get personal normal ranges
   subject_id <- sprintf("S%02d", subject_code)
@@ -854,7 +960,7 @@ sysdimet_lp_plots(kontrolli_group$subject_code[16:34], "figures/sysdimet_concent
 # Visualize the main results
 library(tibble)
 
-intake.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+intake.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50_flatconc/recommendation_summary_with_concpreds_and_current.rds")
 
 recommendation <- colnames(intake.df)[4:(4+14)]
 
@@ -950,7 +1056,7 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
    column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44], underline = fixed_concs.df[,29] == up_color) %>%
    column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45], underline = fixed_concs.df[,30] == up_color) %>%
    column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46], underline = fixed_concs.df[,31] == up_color) %>%
-   save_kable(file = "tables/sysdimet_fixed_intake.pdf", keep_tex = TRUE)
+   save_kable(file = "tables/sysdimet_fixed_intake_flatconc.pdf", keep_tex = TRUE)
 
 ```
 
@@ -977,7 +1083,7 @@ recommendation_table.df <- intake.df %>%
                               # Recommendation cell coloring conditional on difference from current value
                               mutate(across(.cols = recommendation,
                                             .fns = ~case_when(
-                                               get(glue::glue("current_{cur_column()}")) < .x ~ up_color,
+                                               get(glue::glue("current_{cur_column()}")) <= .x ~ up_color,
                                                get(glue::glue("current_{cur_column()}"))  > .x ~ down_color,
                                                get(glue::glue("current_{cur_column()}"))  == .x ~ keep_color,
                                             ),
@@ -985,8 +1091,9 @@ recommendation_table.df <- intake.df %>%
                               # Cell bolding conditional on amount of the difference (30%)
                               mutate(across(.cols = recommendation,
                                             .fns = ~case_when(
-                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) > 30 ~ TRUE,
-                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) < 30 ~ FALSE,
+                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) >= 30 ~ TRUE,
+                                               abs(((get(glue::glue("current_{cur_column()}"))) - .x) / .x * 100) < 3098 ~ FALSE,
+                                               .default = FALSE,
                                             ),
                                             .names = "{.col}_bold")) %>%
                               # Round, format and paste as multiline-string with CI
@@ -1031,7 +1138,26 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
    column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46], underline = fixed_concs.df[,31] == FALSE) %>%
    save_kable(file = "tables/recommendations_sysdimet_change.pdf", keep_tex = TRUE)
 
+
 ```
+
+```{r}
+library(ggplot2)
+
+person_id <- 1
+c1 <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",person_id,".rds"))
+
+ggplot(c1) +
+  geom_point(aes(y=lp, x=dvit, color=preference), size = 0.7, show.legend = FALSE) +
+  geom_vline(xintercept = mean(c1$dvit), linetype="solid", color = "black", linewidth=0.3) +
+  scale_colour_gradient(low = "white", high = "blue", na.value = NA)
+
+# Nyt suositus eli posteriorin odotusarvo on 60, mutta preferenssifunktion mukainen suositus olisi paljon pienempi eli lähempänä nykyarvoa.
+# Miten suositus-posteriorin odotusarvon saisi lähemmäs preferenssiä?  
+
+```
+
+
 
 # TRASHCAN
 
@@ -1126,5 +1252,33 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
 ```
 
 
+
+```{r personal_graphs_comparison, eval=TRUE, fig.height = 8, fig.width = 5, fig.align = "left", echo=FALSE, message=FALSE, warning=FALSE, cache=FALSE, fig.cap="Two subjects were picked from differently reacting clusters and their personally predicted reaction graphs show differences from the general behaviour. The figure is plotted with iGraph package for R language (v 1.2.6, https://igraph.org/r)."}
+source("mebn/MEBN.r")
+require(igraph)
+personal_graph1 <- read.graph("graphs/personal_insample_graph_s01.graphml", "graphml")
+personal_graph2 <- read.graph("graphs/personal_insample_graph_s104.graphml", "graphml")
+
+par(mfrow=c(2,1))
+layout <- mebn.plot_personal_effects(personal_graph1, 10, graph_layout, colorImage = !RenderArticleFigures)
+title("Subject 1 from cluster 3 with high insulin reactions",cex.main=0.7)
+layout <- mebn.plot_personal_effects(personal_graph2, 10, graph_layout, colorImage = !RenderArticleFigures)
+title("Subject 2 from cluster 2 with moderate insulin reactions",cex.main=0.7)
+```
+
+```{r}
+source("mebn/v3/MEBNv3.r")
+require(igraph)
+#library(tidygraph)
+
+personal_graph1 <- read.graph("graphs/sysdimet/gamma_qr_mv/1/personal_graph.graphml", "graphml")
+
+nutrients <- V(personal_graph1)[V(personal_graph1)$type == 100 | V(personal_graph1)$type == 200]
+
+name_lookup <- data.frame(Name = nutrients$name) %>% inner_join(sysdimet_datadesc, by = join_by(Name))
+
+layout <- mebn.plot_personal_effects(personal_graph1, 60, name_lookup$ShortDescription, graph_layout = NULL)
+
+```
 
 
