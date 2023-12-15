@@ -1331,6 +1331,7 @@ mebn.multivariate_dens_overlays <- function(modelfile_path, target_variables, da
     
     posterior <- rstan::extract(target_blmm, pars = c("Y_rep"))
     posterior_y_50 <- posterior$Y_rep[3800:3900,i,]
+    #posterior_y_50 <- posterior$Y_rep[800:900,i,]
     #posterior_y_50 <- posterior$Y_rep[,i,]
     
     scalemin <- as.numeric(as.character(target_variables[target_variables$Name == targetname,]$ScaleMin))
@@ -1414,39 +1415,6 @@ mebn.sampling <- function(inputdata, targetdata, predictor_columns, target_colum
 
 ##################################################
 
-mebn.multivariate_sampling_fixed <- function(inputdata, targetdata, predictor_columns, target_columns, group_column, local_model_cache = "models", stan_mode_file = "BLMM.stan", normalize_values = TRUE, reg_params = NULL)
-{
-  require(rstan)
-  
-  # Run Stan parallel on multiple cores
-  rstan_options (auto_write=TRUE)
-  options (mc.cores=parallel::detectCores ()) 
-  
-  target_name <- paste0(target_columns$Name, collapse = "_")
-  
-  localfit <- mebn.get_localfit(target_name, local_model_cache)
-  
-  # Use cached model if it exists
-  if (is.null(localfit))
-  {
-    # This functions is fixed to responses named "pk" and "fppi" - it will be generalized later
-    stanDat <- mebn.set_mv_fixed_model_parameters(predictor_columns, target_columns, group_column, inputdata, targetdata, normalize_values, reg_params)
-    
-    localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 1000, iter=2000, chains=4, init=0, control = list(adapt_delta = 0.80, max_treedepth = 12))
-    
-    print("Sampling done. Saving..")
-    
-    modelcache <- paste0(local_model_cache, "/", target_name, "_blmm", ".rds")
-    
-    saveRDS(localfit, file=modelcache)
-    print("Done.")
-  }
-  
-  return(localfit)
-}  
-
-##################################################
-
 mebn.multivariate_sampling <- function(inputdata, targetdata, predictor_columns, target_columns, group_column, local_model_cache = "models", stan_mode_file = "BLMM.stan", normalize_values = TRUE, reg_params = NULL)
 {
   require(rstan)
@@ -1465,7 +1433,7 @@ mebn.multivariate_sampling <- function(inputdata, targetdata, predictor_columns,
     stanDat <- mebn.set_mv_model_parameters(predictor_columns, target_columns, group_column, inputdata, targetdata, normalize_values, reg_params)
     
     localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 1000, iter=2000, chains=4, init=0, control = list(adapt_delta = 0.80, max_treedepth = 12))
-    
+
     print("Sampling done. Saving..")
     
     modelcache <- paste0(local_model_cache, "/", target_name, "_blmm", ".rds")
@@ -1495,12 +1463,12 @@ mebn.two_level_multivariate_sampling <- function(inputdata, targetdata, predicto
   if (is.null(localfit))
   {
     stanDat <- mebn.set_mv_two_level_model_parameters(predictor_columns, target_columns, group_column, subject_column, inputdata, targetdata, normalize_values, reg_params)
+    chains <- 4
+
+    localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 1000, iter=3000, init=0, chains=chains, control = list(adapt_delta = 0.80, max_treedepth = 12))
 
     #saveRDS(stanDat, file="stanparams.rds")
-    
-    #localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 100, iter=200, chains=4, init=0)
-    localfit <- stan(file=stan_mode_file, data=stanDat, warmup = 1000, iter=2000, chains=4, init=0, control = list(adapt_delta = 0.80, max_treedepth = 12))
-    
+
     print("Sampling done. Saving..")
     
     modelcache <- paste0(local_model_cache, "/", target_name, "_blmm", ".rds")
@@ -2203,6 +2171,10 @@ mebn.extract_personal_graph_from_mv <- function(person_id, reaction_graph, perso
     
     reaction_graph <- set_vertex_attr(reaction_graph, "g_alpha", target_vertex, g_alpha_file)
 
+    # - expected value of gamma distribution for all the persons
+    localfit_gamma_rep <- extract(localfit, pars = c("Y_rep"))
+    reaction_graph <- set_vertex_attr(reaction_graph, "expected_value", target_vertex, mean(localfit_gamma_rep$Y_rep[,c,]))
+    
     # - personal intercept
 
     localfit_p_intercept <- extract(localfit, pars = c(paste0("personal_intercept[",person_id,",",c,"]")))
@@ -2352,6 +2324,10 @@ mebn.extract_multilevel_graph <- function(person_id, group_id, reaction_graph, a
     target_vertex$g_alpha <- g_alpha_file
     
     reaction_graph <- set_vertex_attr(reaction_graph, "g_alpha", target_vertex, g_alpha_file)
+    
+    # - expected value of gamma distribution for all the persons
+    localfit_gamma_rep <- extract(localfit, pars = c("Y_rep"))
+    reaction_graph <- set_vertex_attr(reaction_graph, "expected_value", target_vertex, mean(localfit_gamma_rep$Y_rep[,c,]))
     
     # - adjusted intercept
     
@@ -3061,7 +3037,7 @@ mebn.layout_bipartite_horizontal <- function(layout_graph, rank_condition)
 
 ##################################################
   
-mebn.plot_personal_effects <- function(personal_graph, top_effects, graph_layout = NULL, plot_title="")
+mebn.plot_personal_effects <- function(personal_graph, top_effects, vextex_labels, graph_layout = NULL, plot_title="")
 {
   library(igraph)
   
@@ -3082,9 +3058,12 @@ mebn.plot_personal_effects <- function(personal_graph, top_effects, graph_layout
   
   # Filter only the most significant edges having large typical effect
   alledges <- E(visual_graph)
+  #top_neg_edges <- head(alledges[order(alledges$weight)], top_effects)
+  #top_pos_edges <- head(alledges[order(-alledges$weight)], top_effects)
+
   top_neg_edges <- head(alledges[order(alledges$weight)], top_effects)
   top_pos_edges <- head(alledges[order(-alledges$weight)], top_effects)
-
+  
   # Comment out this row to see all the connections at the model
   visual_graph <- delete.edges(visual_graph, alledges[-c(top_neg_edges, top_pos_edges)])
   
@@ -3101,15 +3080,16 @@ mebn.plot_personal_effects <- function(personal_graph, top_effects, graph_layout
   V(visual_graph)[V(visual_graph)$type == "200"]$label.degree = 0 # right side
   
   # Color and size encoding for edges according to beta + b coefficients
-  E(visual_graph)[E(visual_graph)$weight > 0]$color="#444444"
+  E(visual_graph)[E(visual_graph)$weight > 0]$color="#F8766D"
 #  E(visual_graph)[E(visual_graph)$weight > 0]$lty=1
-  E(visual_graph)[E(visual_graph)$weight < 0]$color="#AAAAAA"
+  E(visual_graph)[E(visual_graph)$weight < 0]$color="#619CFF"
 #  E(visual_graph)[E(visual_graph)$weight < 0]$lty=5
-  E(visual_graph)$width = abs(E(visual_graph)$weight) * 6
+  E(visual_graph)$width = abs(E(visual_graph)$weight) * 1
   
   plot(visual_graph, 
        layout=graph_layout, 
        rescale=TRUE,
+       vertex.label = vextex_labels,
        vertex.label.color="black",
        vertex.label.cex=0.6,
        vertex.label.dist=3.5,
@@ -3463,6 +3443,29 @@ mebn.GetBeta <- function(reaction_graph, graph_dir, point_est = "mean")
   return(beta_point)
 }
 
+mebn.gamma_adjustments <- function(c, shape, expected_value) {
+  
+  # Gets alpha/shape-parameter that is estimated at given expected value
+  # Returns distances from expected value to lower and upper c-quantile values
+  # from gamma distribution of this shape
+  
+  rate <- shape / expected_value  # Rate parameter (β) for the gamma distribution
+  
+  lower_quantile_value <- qgamma(1-c, shape = shape, rate = rate)
+  upper_quantile_value <- qgamma(c, shape = shape, rate = rate)
+  
+  mu_lower_adjustment <- expected_value - lower_quantile_value 
+  mu_upper_adjustment <- upper_quantile_value - expected_value 
+  
+  result <- within(list(),
+                   {
+                     mu_lower_adjustment <- mu_lower_adjustment
+                     mu_upper_adjustment <- mu_upper_adjustment
+                   })
+  
+  return(result)
+}
+
 mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, param_point_est, X_point_est, queried_nodes) {
   
   predictor_nodes <- V(reaction_graph)[type == 100]
@@ -3649,7 +3652,7 @@ mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, p
   return(params)
 }
 
-mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 10, l2 = 100, l3 = 1)
+mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 10, l2 = 100, l3 = 1, l4 = 0.3)
 {
   library(rstan)
   library(igraph)
@@ -3665,7 +3668,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   
   # Collect model parameters from the graph
   chains <- 4
-  density_chain_samples <- 1000
+  density_chain_samples <- 2000
   density_samples <- density_chain_samples * chains  # sampling stored in RDS for all the chains (4*1000)
   
   beta_samples <- array(-1, dim = c(targets, predictors, density_samples))
@@ -3675,6 +3678,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   beta_point <- array(-1, dim = c(targets, predictors))
   intercept_point <- array(-1, dim = c(targets))
   alpha_point <- array(-1, dim = c(targets))
+  expected_values <- array(-1, dim = c(targets))
   
   predictor_evidence <- array(-1, dim = c(predictors, 2))
   cond_index <- c()
@@ -3701,6 +3705,9 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
       print("Expected rds-file of density samples. Aborting.")
       return()
     }
+    
+    # get pre-estimated expected value for all subjects
+    expected_values[t] <- target_node$expected_value
 
     # beta is collected from target/predictor
     for (p in 1:predictors) {
@@ -3827,14 +3834,19 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
     print("X_point_est: CI95")
   }
   
-  #print(paste0("alpha_point" ,alpha_point))
+  print(paste0("expected_values " ,expected_values))
   
   quant_limit <- 0.9
-  quantile_adjusted_conc_lower_limits <- qgamma(1-quant_limit, shape=alpha_point, rate=alpha_point/conc_lower_limits)
-  quantile_adjusted_conc_upper_limits <- qgamma(quant_limit, shape=alpha_point, rate=alpha_point/conc_upper_limits)
+  adjusments <- mebn.gamma_adjustments(quant_limit, alpha_point, expected_values)
   
-  #print(quantile_adjusted_conc_lower_limits)
-  #print(quantile_adjusted_conc_upper_limits)
+  quantile_adjusted_conc_lower_limits <- conc_lower_limits + adjusments$mu_lower_adjustment
+  quantile_adjusted_conc_upper_limits <- conc_upper_limits - adjusments$mu_upper_adjustment
+
+  print(conc_lower_limits)
+  print(conc_upper_limits)
+  
+  print(quantile_adjusted_conc_lower_limits)
+  print(quantile_adjusted_conc_upper_limits)
   
   params <- within(list(),
                    {
@@ -3848,7 +3860,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Y_upper_limits <- quantile_adjusted_conc_upper_limits
                      general_RI 
                      current_Q <- Q_evidence[,1]
-                     X_evidence <- X_evidence
+                     #X_evidence <- X_evidence
                      X_evidence_point <- X_evidence_point
                      
                      intercept_point <- intercept_point
@@ -3857,9 +3869,10 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Q_beta_point <- Q_beta_point
                      linear_transformation <- offset_value
                      
-                     preference_strength <- l3
                      bound_steepness <- l1
                      bound_requirement <- l2
+                     preference_strength <- l3
+                     transition_steepness <- l4
                      
                      posterior_samples <- posterior_samples
                    })

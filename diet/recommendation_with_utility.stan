@@ -51,7 +51,7 @@ data {
     real bound_steepness;     // l1: steepness of single soft bound
     real bound_requirement;   // l2: steepness of meeting all the bounds
     real preference_strength; // l3: preference requirement
-    real mix; // mixing proportion of preference into in_concentration_range  
+    real transition_steepness; // transition steepness between mixture components
 }
 
 transformed data {
@@ -70,15 +70,14 @@ parameters {
   // Resulting parameters of this inference are these personal recommendations for intake proposals Q
   // Each nutrient Q is given lower and upperlimits for its recommendation
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
-  
-  //real<lower=0> l3;
+
 }
 
 transformed parameters {
 
-  real in_concentration_range;
+  real in_concentration_range_lpdf;
+  real preference_lpdf;
   real in_range;
-  real preference;
   real Y_mu[responses];
   real Y_bound[responses*2];
   real softbound_sum = 0;
@@ -101,16 +100,14 @@ transformed parameters {
   // make preference_error_sum invariant to number of concentrations (responses)
   preference_error_sum = preference_error_sum / responses;
   
-  //in_concentration_range = exponential_lpdf(2*responses - softbound_sum | bound_requirement);
-  in_concentration_range = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
+  in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
+
+  preference_lpdf = normal_lpdf(preference_error_sum | 0, 1/preference_strength);
+  //preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
   
-  // Pitääkö olla -1 tai +1? Pitääkö arvon mennä yli nollan että ässä taipuu?
-  in_range = inv_logit((softbound_sum - 2*responses - 1) * 20);
-  
-  //in_concentration_range_cdf = exponential_cdf(2*responses - softbound_sum, 1/bound_requirement);
-  
-  //preference = exponential_lpdf(preference_error_sum | preference_strength);
-  preference = normal_lpdf(preference_error_sum | 0, 1/preference_strength);
+  // transition coefficient (from 0 to 1) when all the concentration bounds are met
+  // - epsilon 0.1 defines an allowed gap to maximum boundsum for in_range to be 1
+  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
 }
 
 model {
@@ -124,8 +121,6 @@ model {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
   
-  //target += normal_lpdf(l3 | 5, 10);
-
   // center of concentration normal ranges can be slightly preferred
   //for (m in 1:responses) {
   //   Y_range = Y_upper_limits[m]-Y_lower_limits[m];
@@ -133,13 +128,9 @@ model {
   //}
   
   // POSTERIOR
-  // Diet preference and concentration requirements are assumed to be independent.
-  // This allows us to sum their log densities without considering their joint density.
-  
-  target += in_concentration_range;
-  target += in_range * preference;
+  // Mixture distribution of concentration requirements and diet preference
 
-  //target += log_mix(in_range, preference, in_concentration_range);
+  target += log_sum_exp(log(1 - in_range) + in_concentration_range_lpdf, log(in_range) + preference_lpdf);
 
 }
 

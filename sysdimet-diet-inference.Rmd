@@ -302,10 +302,10 @@ for (person_id in 1:1) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0,
-                           l1 = 10,
-                           l2 = 10,
-                           l3 = 70,
-                           mix = 0.5)
+                           l1 = 20,
+                           l2 = 50,
+                           l3 = 50,
+                           l4 = 50)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -316,7 +316,8 @@ for (person_id in 1:1) {
   # Add inference details
   intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
   intake_proposals.df$lp <- result$lp__
-  intake_proposals.df$preference <- result$preference
+  intake_proposals.df$preference <- result$preference_lpdf
+  intake_proposals.df$in_concentration_range <- result$in_concentration_range_lpdf
   intake_proposals.df$boundsum <- result$softbound_sum
   
   # Add expected values of concentrations
@@ -333,7 +334,7 @@ for (person_id in 1:1) {
     intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
   }
   
-  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsum", assumedtargets$Name, queried_nodes)
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "in_concentration_range", "boundsum", assumedtargets$Name, queried_nodes)
   
   # STOP HERE FOR DEBUG
   
@@ -400,23 +401,22 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 
 
 ```{r}
+result$dvit <- intake_proposals.df$dvit 
+
+ggplot(as.data.frame(intake_proposals.df)) +
+  geom_point(aes(y=preference, x=in_concentration_range, color=lp), show.legend=FALSE) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 ggplot(as.data.frame(result)) +
-  geom_point(aes(y=in_range*preference, x=in_concentration_range, color=lp__), show.legend=FALSE) +
+  geom_point(aes(y=in_range*preference_lpdf, x=(1-in_range)*in_concentration_range_lpdf, color=dvit), show.legend=FALSE) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 mean(intake_proposals.df$dvit)  
 
-max(result$lp) # -73... -33 (normal l3)
-mean(result$l3)
-max(result$in_concentration_range) # -23, -35
-
 plot(result$softbound_sum, result$in_range)
 
-plot(result$in_concentration_range, result$in_range)
-plot(result$softbound_sum, result$in_range)
-
-hist(result$in_range)
+plot(result$in_range*result$preference_lpdf, result$dvit)
+plot(result$dvit, result$lp__)
 
 #plot(result$preference, result$preference_error_sum)
 
@@ -441,7 +441,7 @@ plot(x, y)
 
 result$Y_bound
 
-
+intake_proposals.df
 ```
 
 
