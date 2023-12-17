@@ -219,6 +219,9 @@ for (person_id in 1:length(patients)) {
 ```
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
+
+# https://khakieconomics.github.io/2016/10/17/An-introduction-to-finite-mixtures.html
+
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
 library(dplyr)
@@ -302,10 +305,10 @@ for (person_id in 1:1) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0,
-                           l1 = 20,
-                           l2 = 50,
-                           l3 = 50,
-                           l4 = 50)
+                           l1 = 200,
+                           l2 = 5,
+                           l3 = 1,
+                           l4 = 80)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -403,45 +406,42 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 ```{r}
 result$dvit <- intake_proposals.df$dvit 
 
-ggplot(as.data.frame(intake_proposals.df)) +
-  geom_point(aes(y=preference, x=in_concentration_range, color=lp), show.legend=FALSE) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-
 ggplot(as.data.frame(result)) +
-  geom_point(aes(y=in_range*preference_lpdf, x=(1-in_range)*in_concentration_range_lpdf, color=dvit), show.legend=FALSE) +
+  geom_point(aes(y=in_range*exp(preference_lpdf)*200, x=exp(in_concentration_range_lpdf), color=dvit), show.legend=FALSE) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 mean(intake_proposals.df$dvit)  
 
 plot(result$softbound_sum, result$in_range)
+plot(result$softbound_sum, exp(result$in_concentration_range_lpdf))
+plot(result$preference_error_sum, exp(result$preference_lpdf))
 
-plot(result$in_range*result$preference_lpdf, result$dvit)
-plot(result$dvit, result$lp__)
+max(exp(result$in_concentration_range_lpdf))
+max(exp(result$preference_lpdf))
 
-#plot(result$preference, result$preference_error_sum)
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = preference_error_sum, y = result$in_range * (exp(result$preference_lpdf) * 200), color=result$in_range))
 
-#####
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = softbound_sum, y = exp(result$in_concentration_range_lpdf), color=result$softbound_sum))
 
-x <- result$softbound_sum
+ggplot(as.data.frame(result), aes(x=exp(result$in_concentration_range_lpdf))) +
+  geom_density(color="darkblue", fill="lightblue")
 
-#calculate normal CDF probabilities
-prob <- pnorm(x, mean = 10, sd = 5, lower.tail = TRUE)
-prob <- pnorm(x, mean = 10, sd = 1)
-x <- seq(-10,1,0.01)
+ggplot(as.data.frame(result), aes(x=exp(result$preference_lpdf))) +
+  geom_density(color="darkblue", fill="lightblue")
 
-x <- result$softbound_sum - 9
+ggplot(as.data.frame(result), aes(x=result$lp)) +
+  geom_density(color="darkblue", fill="lightblue")
 
-inv_logit = function(x) {
-  1 / (1 + exp(-x))
-}
 
-y <- inv_logit(x*5)
+# Tämä plotti paljastaa ongelman: 
+# - suurin massa sampleista on pienen preferenssin kohdalla
+# - preferenssin huippu suosii pieniä dvit-arvoja, mutta sellaisia saanteja on määrällisesti vähemmän eli ne ovat vähemmän todennäköisiä
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = dvit, y = result$in_range * (exp(result$preference_lpdf) * 200), color=1-result$preference_error_sum))
 
-plot(x, y)
 
-result$Y_bound
-
-intake_proposals.df
 ```
 
 

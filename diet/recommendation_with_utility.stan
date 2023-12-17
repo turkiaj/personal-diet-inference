@@ -88,10 +88,12 @@ transformed parameters {
     Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
   
     // lower bound sigmoid    
-    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
+    //Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
+    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * 30);
     
     // upper bound sigmoid
-    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
+    //Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
+    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * 30);
     
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
     preference_error_sum += preference_error(Q, current_Q, Q_beta_point[m], r);
@@ -102,12 +104,14 @@ transformed parameters {
   
   in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
 
-  preference_lpdf = normal_lpdf(preference_error_sum | 0, 1/preference_strength);
-  //preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
+  //preference_lpdf = normal_lpdf(preference_error_sum | 0, 1/preference_strength);
+  preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
   
   // transition coefficient (from 0 to 1) when all the concentration bounds are met
   // - epsilon 0.1 defines an allowed gap to maximum boundsum for in_range to be 1
+  
   in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
+  //in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * 30);
 }
 
 model {
@@ -129,8 +133,18 @@ model {
   
   // POSTERIOR
   // Mixture distribution of concentration requirements and diet preference
+  // log_sum_exp(a, b) = log(exp(a) + exp(b))
+  
+  // https://en.wikipedia.org/wiki/Probability_density_function#Sums_of_independent_random_variables
 
-  target += log_sum_exp(log(1 - in_range) + in_concentration_range_lpdf, log(in_range) + preference_lpdf);
+  //target += log((1-transition_steepness)*exp(in_concentration_range_lpdf) + transition_steepness * in_range * (exp(preference_lpdf + bound_steepness)));
+  target += log(exp(in_concentration_range_lpdf) + in_range * exp(preference_lpdf) * bound_steepness);
+  //target += log(0.5*exp(in_concentration_range_lpdf)); toimii
+
+  //target += log_mix(0.5, in_concentration_range_lpdf, in_range*preference_lpdf);
+  //target += in_concentration_range_lpdf;
+  //target += in_concentration_range_lpdf;
+
 
 }
 
