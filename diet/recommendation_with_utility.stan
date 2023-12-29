@@ -4,8 +4,6 @@ functions {
   // its maximum value when the current diet proposal is closest to most preferred diet
   real preference_error(vector Q, vector RI, vector beta, int r) {
     
-    // real personal_preference_strength, real penalty_rate
-    
     // This function prefers such a personal diet proposal that is closest to person's current diet
     // and it is achieved by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
     
@@ -15,8 +13,6 @@ functions {
     // So, nutrients with stronger effects are allowed to change more
     vector[r] weighted_diffs = (1 - fabs(beta)) .* diffs;
 
-    //real power_sum = pow(sum(weighted_diffs) / r, penalty_rate);
-    
     return sum(weighted_diffs) / r;
   }
   

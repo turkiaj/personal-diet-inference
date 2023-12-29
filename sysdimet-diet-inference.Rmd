@@ -268,7 +268,11 @@ kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 #for (person_id in 1:length(kontrolli)) {
 for (person_id in 1:1) {
 
-  #person_id <- 21
+  # testaa nämä, menee yli rajojen
+  #person_id <- 3
+  #person_id <- 6
+
+  person_id <- 1
   
   #print(paste0("Simulating patient ", person_id))
 
@@ -305,10 +309,11 @@ for (person_id in 1:1) {
                            X_point_est = "mean",
                            posterior_samples = 500,
                            repeat_only = 0,
-                           l1 = 200,
-                           l2 = 5,
-                           l3 = 1,
-                           l4 = 80)
+                           l1 = 10,
+                           l2 = 15,
+                           l3 = 2,
+                           l4 = 30,
+                           l5 = 4)
 
     #params <- readRDS("last_params.rds")
     #params
@@ -322,6 +327,7 @@ for (person_id in 1:1) {
   intake_proposals.df$preference <- result$preference_lpdf
   intake_proposals.df$in_concentration_range <- result$in_concentration_range_lpdf
   intake_proposals.df$boundsum <- result$softbound_sum
+  intake_proposals.df$in_range <- result$in_range
   
   # Add expected values of concentrations
   for (node_index in 1:nrow(assumedtargets)) {
@@ -337,9 +343,7 @@ for (person_id in 1:1) {
     intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
   }
   
-  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "in_concentration_range", "boundsum", assumedtargets$Name, queried_nodes)
-  
-  # STOP HERE FOR DEBUG
+  colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "in_concentration_range", "boundsum", "in_range", assumedtargets$Name, queried_nodes)
   
   saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",person_id,".rds"))
 
@@ -404,46 +408,47 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 
 
 ```{r}
-result$dvit <- intake_proposals.df$dvit 
-
-ggplot(as.data.frame(result)) +
-  geom_point(aes(y=in_range*exp(preference_lpdf)*200, x=exp(in_concentration_range_lpdf), color=dvit), show.legend=FALSE) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
-
-mean(intake_proposals.df$dvit)  
-
-plot(result$softbound_sum, result$in_range)
-plot(result$softbound_sum, exp(result$in_concentration_range_lpdf))
-plot(result$preference_error_sum, exp(result$preference_lpdf))
+library(ggplot2)
+library(bayesplot)
 
 max(exp(result$in_concentration_range_lpdf))
 max(exp(result$preference_lpdf))
 
-ggplot(as.data.frame(result)) +
-  geom_point(aes(x = preference_error_sum, y = result$in_range * (exp(result$preference_lpdf) * 200), color=result$in_range))
-
-ggplot(as.data.frame(result)) +
-  geom_point(aes(x = softbound_sum, y = exp(result$in_concentration_range_lpdf), color=result$softbound_sum))
-
-ggplot(as.data.frame(result), aes(x=exp(result$in_concentration_range_lpdf))) +
-  geom_density(color="darkblue", fill="lightblue")
-
-ggplot(as.data.frame(result), aes(x=exp(result$preference_lpdf))) +
-  geom_density(color="darkblue", fill="lightblue")
-
-ggplot(as.data.frame(result), aes(x=result$lp)) +
-  geom_density(color="darkblue", fill="lightblue")
-
-
 # Tämä plotti paljastaa ongelman: 
 # - suurin massa sampleista on pienen preferenssin kohdalla
 # - preferenssin huippu suosii pieniä dvit-arvoja, mutta sellaisia saanteja on määrällisesti vähemmän eli ne ovat vähemmän todennäköisiä
-ggplot(as.data.frame(result)) +
-  geom_point(aes(x = dvit, y = result$in_range * (exp(result$preference_lpdf) * 200), color=1-result$preference_error_sum))
 
+ggplot(as.data.frame(recommendation_intake.df)) +
+  geom_point(aes(x = dvit, y = (1-in_range)*exp(in_concentration_range) + in_range * exp(preference)), color="red") +
+  geom_point(aes(x = dvit, y = (1-in_range)*exp(in_concentration_range)), color="blue") 
+
+# P1 current kuitu 26.4
+# P1 current dvit 6.1375
+
+recommendation_intake.df$linoliepros
+recommendation_intake.df$linoleeniepros
+
+plot(recommendation_intake.df$linoliepros, recommendation_intake.df$preference)
+plot(recommendation_intake.df$kuitu, recommendation_intake.df$preference)
+
+result$dvit <- intake_proposals.df$dvit 
+result$kuitu <- intake_proposals.df$kuitu
+result$preference_lpdf <- intake_proposals.df$preference
+
+# Tämä on nyt tärkein plotti. Jakauma pitäisi saada niin, että suurempiin virheisiin mentäessä jakauma jyrkkenee ja loivenee pienemmillä jolloin sielä on liikkumavaraa
+#ggplot(as.data.frame(result)) + geom_point(aes(x = preference_error_sum, y = preference_lpdf, color=1-dvit))
+
+# Näillä arvoilla tulee nyt hyvä kasa
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = dvit, y = preference_lpdf))
+
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = in_concentration_range_lpdf, y = preference_lpdf,  color = 1-dvit))
+
+mean(recommendation_intake.df$dvit)  
+mean(recommendation_intake.df$kuitu)  # P3, kuitu 21
 
 ```
-
 
 ```{r fig.height=8, inference_debug}
 
@@ -461,27 +466,31 @@ recommendation_intake.df <- intake_proposals.df
 
 conc_plot1 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fshdl, color=preference), show.legend=FALSE) +
+  #geom_density(aes(x=fshdl), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7)) 
-  #scale_colour_gradient2(low="#FFFFFF", high="#00BFFF", midpoint=lp_mid) 
 
 conc_plot2 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fsldl, color=preference), show.legend=FALSE) +
+  #geom_density(aes(x=fsldl), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot3 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fsins, color=preference), show.legend=FALSE) +
+  #geom_density(aes(x=fsins), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot4 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fskol, color=preference), show.legend=FALSE) +
+  #geom_density(aes(x=fskol), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot5 <- ggplot(recommendation_intake.df) +
   geom_point(aes(y=lp, x=fpgluk, color=preference), show.legend=FALSE) +
+  #geom_density(aes(x=fpgluk), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
   
@@ -495,42 +504,53 @@ lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plo
 
 ```
 
+```{r fig.height=8, inference_debug2}
 
-```{r}
+fshdl_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+fsldl_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+fsins_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+fskol_recommendations <- c(recommeded_concentrations$lower_limits[4], recommeded_concentrations$upper_limits[4])
+fpgluk_recommendations <- c(recommeded_concentrations$lower_limits[5], recommeded_concentrations$upper_limits[5])
 
-ggplot(recommendation_intake.df) +
-  geom_point(aes(y=fshdl, x=dvit, color=boundsum), show.legend=FALSE) +
+recommendation_intake.df <- intake_proposals.df 
+
+#recommendation_intake.df <- intake_proposals.df %>%
+#  filter(boundsum >= 2 * nrow(assumedtargets) - 0.3) %>%
+#  as.data.frame()
+
+conc_plot1 <- ggplot(recommendation_intake.df) +
+  geom_density(aes(x=fshdl), color="darkblue", fill="lightblue") +
+  geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) 
+  #scale_colour_gradient2(low="#FFFFFF", high="#00BFFF", midpoint=lp_mid) 
+
+conc_plot2 <- ggplot(recommendation_intake.df) +
+  geom_density(aes(x=fsldl), color="darkblue", fill="lightblue") +
+  geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot3 <- ggplot(recommendation_intake.df) +
+  geom_density(aes(x=fsins), color="darkblue", fill="lightblue") +
+  geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot4 <- ggplot(recommendation_intake.df) +
+  geom_density(aes(x=fskol), color="darkblue", fill="lightblue") +
+  geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
+  scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+conc_plot5 <- ggplot(recommendation_intake.df) +
+  geom_density(aes(x=fpgluk), color="darkblue", fill="lightblue") +
   geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
   
+lay <- rbind(c(1),
+             c(2),
+             c(3),
+             c(4),
+             c(5))
 
-```
-
-
-
-```{r}
-library(rstan)
-library(ggplot2)
-
-rstan_options (auto_write=TRUE)
-options (mc.cores=parallel::detectCores ()) 
-
-data_list <- within(list(),
-{
-    y_mean = 20
-    y_sd = 10
-    x_preferred = 15
-    x_sd = 0.5
-})
-                  
-stan_model <- stan(file="mebn/joint_density_demo.stan",model_name="demo", warmup = 500, iter=1000, chains=4, data=data_list, seed=483892929)
-
-result <- rstan::extract(stan_model)
-df <- as.data.frame(result)
-
-ggplot(df, aes(x=lp__)) +
-  geom_density(color="darkblue", fill="lightblue")
-
+lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 
 ```
 
@@ -1271,13 +1291,15 @@ source("mebn/v3/MEBNv3.r")
 require(igraph)
 #library(tidygraph)
 
-personal_graph1 <- read.graph("graphs/sysdimet/gamma_qr_mv/1/personal_graph.graphml", "graphml")
+#personal_graph1 <- read.graph("graphs/sysdimet/gamma_qr_mv/1/personal_graph.graphml", "graphml")
+#personal_graph3 <- read.graph("graphs/sysdimet/gamma_qr_mv/3/personal_graph.graphml", "graphml")
+personal_graph6 <- read.graph("graphs/sysdimet/gamma_qr_mv/6/personal_graph.graphml", "graphml")
 
-nutrients <- V(personal_graph1)[V(personal_graph1)$type == 100 | V(personal_graph1)$type == 200]
+nutrients <- V(personal_graph6)[V(personal_graph6)$type == 100 | V(personal_graph6)$type == 200]
 
 name_lookup <- data.frame(Name = nutrients$name) %>% inner_join(sysdimet_datadesc, by = join_by(Name))
 
-layout <- mebn.plot_personal_effects(personal_graph1, 60, name_lookup$ShortDescription, graph_layout = NULL)
+layout <- mebn.plot_personal_effects(personal_graph6, 60, name_lookup$ShortDescription, graph_layout = NULL)
 
 ```
 
