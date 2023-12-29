@@ -3,21 +3,21 @@ functions {
   // This function defines a custom probability distribution that receives 
   // its maximum value when the current diet proposal is closest to most preferred diet
   real preference_error(vector Q, vector RI, vector beta, int r) {
-
+    
+    // real personal_preference_strength, real penalty_rate
+    
     // This function prefers such a personal diet proposal that is closest to person's current diet
     // and it is achieved by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
     
-    vector[r] diffs = Q - RI;
+    vector[r] diffs = fabs(Q - RI);
     
     // Multiply difference elementwise with inverse of personal effect. This prefers changes in nutrients having stronger effect. 
-    // So, nutrients with stronger effects are allowed to be changed more.
+    // So, nutrients with stronger effects are allowed to change more
     vector[r] weighted_diffs = (1 - fabs(beta)) .* diffs;
-    
-    //real sum_of_errors = sum(fabs(diffs));
-    real sum_of_errors = sum(fabs(weighted_diffs));
 
-    // scale the error sum with number of predictors 
-    return sum_of_errors / r;
+    //real power_sum = pow(sum(weighted_diffs) / r, penalty_rate);
+    
+    return sum(weighted_diffs) / r;
   }
   
 }
@@ -48,10 +48,11 @@ data {
     
     real linear_transformation;
 
-    real bound_steepness;     // l1: steepness of single soft bound
-    real bound_requirement;   // l2: steepness of meeting all the bounds
-    real preference_strength; // l3: preference requirement
-    real transition_steepness; // transition steepness between mixture components
+    real bound_steepness;      // l1: steepness of single soft bound
+    real bound_requirement;    // l2: steepness of meeting all the bounds
+    real preference_strength;  // l3: preference requirement (estimated, remvoe?)
+    real transition_steepness; // l4: transition steepness between mixture components (is in_range necessary, remove?)
+    real penalty_rate;          // l5: Exponential penalty_rate of preference error
 }
 
 transformed data {
@@ -70,7 +71,8 @@ parameters {
   // Resulting parameters of this inference are these personal recommendations for intake proposals Q
   // Each nutrient Q is given lower and upperlimits for its recommendation
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
-
+  
+  //real<lower=0> personal_preference_strength;
 }
 
 transformed parameters {
@@ -82,36 +84,36 @@ transformed parameters {
   real Y_bound[responses*2];
   real softbound_sum = 0;
   real preference_error_sum = 0;
-
+  
   // Probability of reaching the concentrations limits
   for (m in 1:responses) {
     Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
   
     // lower bound sigmoid    
-    //Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
-    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * 30);
+    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
     
     // upper bound sigmoid
-    //Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
-    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * 30);
+    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
     
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
     preference_error_sum += preference_error(Q, current_Q, Q_beta_point[m], r);
   }
+
+  // transition coefficient (from 0 to 1) when all the concentration bounds are met
+  // - epsilon 0.1 defines an allowed gap to maximum boundsum so that sigmoid is pushed to 1
+  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
   
-  // make preference_error_sum invariant to number of concentrations (responses)
-  preference_error_sum = preference_error_sum / responses;
-  
+  // normal distribution is used for concentration bounds as we require that all bounds are fulfilled
   in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
 
-  //preference_lpdf = normal_lpdf(preference_error_sum | 0, 1/preference_strength);
+  // make preference_error_sum invariant to number of concentrations (responses)
+  // also penalize bigger preference errors with power growth
+  preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
+
+  // exponential distribution is used for preferences as the strenght is estimated personally and can vary
+  // - square and exponential growth of error penalizes more large errors
   preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
-  
-  // transition coefficient (from 0 to 1) when all the concentration bounds are met
-  // - epsilon 0.1 defines an allowed gap to maximum boundsum for in_range to be 1
-  
-  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
-  //in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * 30);
+
 }
 
 model {
@@ -125,6 +127,8 @@ model {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
   
+  //arget += normal_lpdf(personal_preference_strength | 5, 10);
+
   // center of concentration normal ranges can be slightly preferred
   //for (m in 1:responses) {
   //   Y_range = Y_upper_limits[m]-Y_lower_limits[m];
@@ -132,19 +136,14 @@ model {
   //}
   
   // POSTERIOR
-  // Mixture distribution of concentration requirements and diet preference
-  // log_sum_exp(a, b) = log(exp(a) + exp(b))
+
+  // in_range-coefficient provides steep but smooth transition between the mixture components
+  // it also ensures that preference is not considered before all the concentration limits are satisfied
+
+  // Random variables are dependent through in_range-coefficient and thus multiplied
+  target += log((1-in_range) * exp(in_concentration_range_lpdf));
+  target += log(in_range * exp(preference_lpdf));
   
-  // https://en.wikipedia.org/wiki/Probability_density_function#Sums_of_independent_random_variables
-
-  //target += log((1-transition_steepness)*exp(in_concentration_range_lpdf) + transition_steepness * in_range * (exp(preference_lpdf + bound_steepness)));
-  target += log(exp(in_concentration_range_lpdf) + in_range * exp(preference_lpdf) * bound_steepness);
-  //target += log(0.5*exp(in_concentration_range_lpdf)); toimii
-
-  //target += log_mix(0.5, in_concentration_range_lpdf, in_range*preference_lpdf);
-  //target += in_concentration_range_lpdf;
-  //target += in_concentration_range_lpdf;
-
-
 }
+
 
