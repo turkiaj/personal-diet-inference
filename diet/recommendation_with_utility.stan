@@ -2,18 +2,21 @@ functions {
   
   // This function defines a custom probability distribution that receives 
   // its maximum value when the current diet proposal is closest to most preferred diet
-  real preference_error(vector Q, vector RI, vector beta, int r) {
+  real preference_error(vector Q_diffs, vector RI, vector beta, int r) {
     
     // This function prefers such a personal diet proposal that is closest to person's current diet
     // and it is achieved by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
     
-    vector[r] diffs = fabs(Q - RI);
-    
     // Multiply difference elementwise with inverse of personal effect. This prefers changes in nutrients having stronger effect. 
     // So, nutrients with stronger effects are allowed to change more
-    vector[r] weighted_diffs = (1 - fabs(beta)) .* diffs;
 
-    return sum(weighted_diffs) / r;
+    vector[r] inverse_beta = 1 ./ (1+fabs(beta));
+    
+    // Q_diffs = fabs(Q - current_Q) is pre-calculated as a model parameter for analysis
+    real weighted_diffs = dot_product(inverse_beta, Q_diffs);
+
+    // resulting error is scaled with the number of predictors
+    return weighted_diffs / r;
   }
   
 }
@@ -48,7 +51,7 @@ data {
     real bound_requirement;    // l2: steepness of meeting all the bounds
     real preference_strength;  // l3: preference requirement (estimated, remvoe?)
     real transition_steepness; // l4: transition steepness between mixture components (is in_range necessary, remove?)
-    real penalty_rate;          // l5: Exponential penalty_rate of preference error
+    real penalty_rate;         // l5: Exponential penalty_rate of preference error
 }
 
 transformed data {
@@ -80,6 +83,8 @@ transformed parameters {
   real Y_bound[responses*2];
   real softbound_sum = 0;
   real preference_error_sum = 0;
+  vector[r] Q_effects[responses];
+  vector[r] Q_diffs; 
   
   // Probability of reaching the concentrations limits
   for (m in 1:responses) {
@@ -92,7 +97,22 @@ transformed parameters {
     Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
     
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
-    preference_error_sum += preference_error(Q, current_Q, Q_beta_point[m], r);
+    
+    //Q_diffs = fabs(Q - current_Q);
+    
+    for (i in 1:r) {
+        // Calculate relative differences
+        if (current_Q[i] != 0) {
+            Q_diffs[i] = fabs(Q[i] - current_Q[i]) / fabs(current_Q[i]);
+        } else {
+            // One approach is to default to the absolute difference or use a small non-zero value
+            Q_diffs[i] = fabs(Q[i] - current_Q[i]);
+        }
+    }    
+    
+    preference_error_sum += preference_error(Q_diffs, current_Q, Q_beta_point[m], r);
+    
+    Q_effects[m] = Q_beta_point[m] .* Q;
   }
 
   // transition coefficient (from 0 to 1) when all the concentration bounds are met
@@ -141,5 +161,14 @@ model {
   target += log(in_range * exp(preference_lpdf));
   
 }
+
+// generated quantities {
+  
+// Sensitivity analysis of recommendations
+// Seek how much the recommendations can be altered before the concentrations go beyond their limits
+  
+//   Y_mu_pred[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
+// }
+
 
 
