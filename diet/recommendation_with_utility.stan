@@ -2,7 +2,7 @@ functions {
   
   // This function defines a custom probability distribution that receives 
   // its maximum value when the current diet proposal is closest to most preferred diet
-  real preference_error(vector Q_diffs, vector RI, vector beta, int r) {
+  real preference_error(vector Q_diffs, vector beta, int r) {
     
     // This function prefers such a personal diet proposal that is closest to person's current diet
     // and it is achieved by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
@@ -19,14 +19,39 @@ functions {
     return weighted_diffs / r;
   }
   
+  // Function calculates maximum preference error given the data of proposed intake limits and personal reactions (beta) 
+  real max_preference_error(vector[] Q_beta_point, vector current_Q, vector proposal_lowerlimits, vector proposal_upperlimits, int r, int responses, real penalty_rate) {
+
+    vector[r] Q_max_diffs;
+    real preference_error_sum = 0;
+
+    for (m in 1:responses) {
+
+      for (i in 1:r) {
+        // Calculate maximum relative differences
+        if (current_Q[i] != 0) {
+            Q_max_diffs[i] = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i])) / fabs(current_Q[i]);
+        } else {
+            Q_max_diffs[i] = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i]));
+        }
+      }
+
+      preference_error_sum += preference_error(Q_max_diffs, Q_beta_point[m], r);
+    }
+
+    preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
+
+    return preference_error_sum;
+  }
+  
 }
 
 data {
     int<lower=1> responses;        // number of responses
     int<lower=1> p;                // number of predictors
     int<lower=0> r;                // number of conditioned predictors
-    vector[r] proposal_lowerlimits; // limits of proposals   
-    vector[r] proposal_upperlimits; // limits of proposals   
+    vector[r] proposal_lowerlimits; // lower limits of proposed nutrient intake   
+    vector[r] proposal_upperlimits; // upper limits of proposed nutrient intake    
     vector[r] general_RI;        // general intake recommendation for calculating the preference function
     vector[r] current_Q;         // current personal intake level for calculating the preference function 
     real Y_lower_limits[responses];        // lower limits of concentrations
@@ -56,13 +81,35 @@ data {
 
 transformed data {
 
+  // This is theoritical maximum error with current intake, personal effects and limits
+  real max_personal_preference_error = max_preference_error(Q_beta_point, current_Q, proposal_lowerlimits, proposal_upperlimits, r, responses, penalty_rate);
+  
+  //print("max_personal_preference_error:");
+  //print(max_personal_preference_error);
+
+  // Here we calculate error threshold (x) for given preference_strength parameter (lambda)  
+  real preference_error_threshold = 1;
+  
+  {
+    real numerical_accuracy = machine_precision();
+    real simulated_preference_pdf = 100;
+
+    while (simulated_preference_pdf > numerical_accuracy) {
+       simulated_preference_pdf = preference_strength * exp(-preference_strength * preference_error_threshold);
+       preference_error_threshold = preference_error_threshold + 1;
+    }
+  }
+
+  //print("preference_error_threshold");
+  //print(preference_error_threshold);
+
   // Estimated value of concentration without the queried predictors (mu_q0)
   // This part of the expected value (mu) does not change during the sampling
   real mu_q0[responses];
-
+  
   for (m in 1:responses) {
     mu_q0[m] = intercept_point[m] + dot_product(X_evidence_point, X_beta_point[m]);
-  } 
+  }
 }
 
 parameters {
@@ -70,8 +117,6 @@ parameters {
   // Resulting parameters of this inference are these personal recommendations for intake proposals Q
   // Each nutrient Q is given lower and upperlimits for its recommendation
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
-  
-  //real<lower=0> personal_preference_strength;
 }
 
 transformed parameters {
@@ -84,7 +129,7 @@ transformed parameters {
   real softbound_sum = 0;
   real preference_error_sum = 0;
   vector[r] Q_effects[responses];
-  vector[r] Q_diffs; 
+  vector[r] Q_diffs;
   
   // Probability of reaching the concentrations limits
   for (m in 1:responses) {
@@ -98,19 +143,16 @@ transformed parameters {
     
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
     
-    //Q_diffs = fabs(Q - current_Q);
-    
     for (i in 1:r) {
         // Calculate relative differences
         if (current_Q[i] != 0) {
             Q_diffs[i] = fabs(Q[i] - current_Q[i]) / fabs(current_Q[i]);
         } else {
-            // One approach is to default to the absolute difference or use a small non-zero value
             Q_diffs[i] = fabs(Q[i] - current_Q[i]);
         }
     }    
     
-    preference_error_sum += preference_error(Q_diffs, current_Q, Q_beta_point[m], r);
+    preference_error_sum += preference_error(Q_diffs, Q_beta_point[m], r);
     
     Q_effects[m] = Q_beta_point[m] .* Q;
   }
@@ -121,15 +163,18 @@ transformed parameters {
   
   // normal distribution is used for concentration bounds as we require that all bounds are fulfilled
   in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
-
+  
   // make preference_error_sum invariant to number of concentrations (responses)
   // also penalize bigger preference errors with power growth
+
   preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
+  
+  // scale preference_error_sum that it does not go over the calculated threshold 
+  preference_error_sum = preference_error_sum * (preference_error_threshold / max_personal_preference_error);
 
-  // exponential distribution is used for preferences as the strenght is estimated personally and can vary
-  // - square and exponential growth of error penalizes more large errors
   preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
-
+  
+  //print(preference_error_sum);
 }
 
 model {
@@ -143,7 +188,7 @@ model {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
   
-  //arget += normal_lpdf(personal_preference_strength | 5, 10);
+  //target += normal_lpdf(personal_preference_strength | 5, 10);
 
   // center of concentration normal ranges can be slightly preferred
   //for (m in 1:responses) {
@@ -164,9 +209,8 @@ model {
 
 // generated quantities {
   
-// Sensitivity analysis of recommendations
+// Sensitivity analysis of recommendations could be calculated here
 // Seek how much the recommendations can be altered before the concentrations go beyond their limits
-  
 //   Y_mu_pred[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
 // }
 

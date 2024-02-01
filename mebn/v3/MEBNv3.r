@@ -3652,7 +3652,7 @@ mebn.extract_parameters_from_graph <- function(reaction_graph, beta_point_est, p
   return(params)
 }
 
-mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 10, l2 = 100, l3 = 1, l4 = 0.3)
+mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal_lowerlimits, proposal_upperlimits, general_RI, conc_lower_limits, conc_upper_limits, stan_model_file, X_point_est = "mean", beta_point_est = "mean", param_point_est = "mean", posterior_samples = 100, repeat_only = 0, l1 = 10, l2 = 100, l3 = 1, l4 = 0.3, l5 = 1, verbose = 0)
 {
   library(rstan)
   library(igraph)
@@ -3816,6 +3816,9 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
     p <- predictors 
   }
   
+  # testitesti
+  #Q_beta_point[,14] <- Q_beta_point[,14] * 0.5
+  
   if (X_point_est == "mean")
   {
     X_evidence_point <- X_evidence[,1]    
@@ -3858,7 +3861,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      proposal_upperlimits <- proposal_upperlimits
                      Y_lower_limits <- quantile_adjusted_conc_lower_limits
                      Y_upper_limits <- quantile_adjusted_conc_upper_limits
-                     general_RI 
+                     general_RI <- general_RI
                      current_Q <- Q_evidence[,1]
                      #X_evidence <- X_evidence
                      X_evidence_point <- X_evidence_point
@@ -3873,11 +3876,13 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      bound_requirement <- l2
                      preference_strength <- l3
                      transition_steepness <- l4
+                     penalty_rate <- l5
                      
                      posterior_samples <- posterior_samples
+                     verbose = verbose
                    })
   
-  #saveRDS(params, "last_params.rds")
+  saveRDS(params, "last_params.rds")
   
   rstan_options (auto_write=TRUE)
   options (mc.cores=parallel::detectCores ())

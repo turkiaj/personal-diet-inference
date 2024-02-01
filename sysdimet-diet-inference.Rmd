@@ -358,10 +358,10 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-#for (person_id in 1:length(kontrolli)) {
-for (person_id in 2:2) {
+for (person_id in 1:length(kontrolli)) {
+#for (person_id in 2:2) {
   
-  person_id <- 6
+  #person_id <- 3
 
   subject_code <- kontrolli[person_id]
 
@@ -397,18 +397,19 @@ for (person_id in 2:2) {
                                X_point_est = "mean",
                                posterior_samples = 500,
                                repeat_only = 0,
+                               verbose = 0,
                                l1 = 8,
                                l2 = 15,
-                               l3 = 2.5,
+                               l3 = 100000,
                                l4 = 30,
-                               l5 = 2.5)
-    
+                               l5 = 2)
+
         #params <- readRDS("last_params.rds")
         #params
       
       # Extract all the samples and correlate concentrations and intake with proposal ids
       result <- rstan::extract(intake_model)
-    
+     
       # Add inference details
       intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
       intake_proposals.df$lp <- result$lp__
@@ -488,9 +489,67 @@ for (person_id in 2:2) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lowerbound"), paste0(assumedtargets$Name, "_upperbound"))
 
-#saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
+
+```
+
+```{r}
+library(ggplot2)
+
+max_error <- 30  # includes penalty l5
+preference_strength <- 2
+numerical_accuracy <- 0.00000000001
+
+simulated_preference_pdf <- 100
+
+# minimum error
+preference_error_threshold <- 1
+
+while (simulated_preference_pdf > numerical_accuracy) {
+  
+  simulated_preference_pdf <- preference_error_threshold * exp(-preference_strength * preference_error_threshold)
+
+  print(preference_error_threshold)
+  print(simulated_preference_pdf)
+
+  preference_error_threshold <- preference_error_threshold + 1;
+}
+
+#preference_strength * exp(-preference_strength * preference_error_sum)
+#dexp(preference_error_sum, preference_strength)
+
+
+# Sample maximum error values, growing exponentially
+max_err <- c(738, 6123, 863860)
+case <- 3
+
+#preference_strength <- -log(1 - 0.8) / max_err;
+
+# Function to calculate preference strength based on max error
+calc_preference_strength <- function(max_err) {
+  # Parameters to scale and adjust the transformation, as needed
+  base_strength <- 5  # Base or maximum possible strength
+  scaling_factor <- 100000  # Adjusts the sensitivity to max_err changes
+  
+  # Calculate preference strength inversely related to log of max_err
+  strength <- base_strength - log(max_err + 1) / log(scaling_factor + 1) * (base_strength - 1)
+  
+  # Ensure strength is within the range [1, base_strength]
+  return(max(1, min(base_strength, strength)))
+}
+
+# Example of calculating and plotting for the first max_err value
+preference_strength <- calc_preference_strength(max_err[case])
+
+error_values <- seq(0, max_err[case], by = 1)
+pdf_values <- dexp(error_values, rate = preference_strength)
+
+ggplot(data = data.frame(error_values, pdf_values), aes(x = error_values, y = pdf_values)) +
+  geom_line(color = "blue") +
+  ggtitle(paste("Exponential Distribution with Preference Strength =", preference_strength))
+
 
 ```
 
@@ -533,7 +592,6 @@ mean(recommendation_intake.df$epa)
 mean(recommendation_intake.df$dvit)  
 mean(recommendation_intake.df$kuitu)  # P3, kuitu 21
 
-
 Q_effects <- colMeans(result$Q_effects[,3,])
 Q_diffs <- colMeans(result$Q_diffs)
 
@@ -566,18 +624,13 @@ mean(result$Y_mu[,3])
 intake_proposals.df$dvit_diff <- result$Q_diffs[,8]
 intake_proposals.df$linoliepros_diff <- result$Q_diffs[,9]
 intake_proposals.df$linoleeniepros_diff <- result$Q_diffs[,10]
-
 intake_proposals.df$epa_diff <- result$Q_diffs[,14]
-ggplot(intake_proposals.df) + geom_point(aes(x = epa_diff, y = lp, color = proposal))
-
 intake_proposals.df$dha_diff <- result$Q_diffs[,15]
 
 ggplot(intake_proposals.df) + geom_point(aes(x = dvit_diff, y = lp, color = proposal))
 ggplot(intake_proposals.df) + geom_point(aes(x = dha_diff, y = lp, color = proposal))
 ggplot(intake_proposals.df) + geom_point(aes(x = linoliepros_diff, y = lp, color = proposal))
 ggplot(intake_proposals.df) + geom_point(aes(x = linoleeniepros_diff, y = lp, color = proposal))
-
-# 
 ggplot(intake_proposals.df) + geom_point(aes(x = epa_diff, y = lp, color = proposal))
 
 ggplot(intake_proposals.df) + geom_point(aes(x = epa, y = preference, color = proposal)) +
@@ -593,6 +646,9 @@ ggplot(intake_proposals.df) + geom_point(aes(x = dha, y = lp, color = proposal))
 ggplot(intake_proposals.df) + geom_density(aes(x=epa), color="darkblue", fill="lightblue") + 
   geom_vline(xintercept = mean(intake_proposals.df$epa), linetype="dashed", color = "black", linewidth=0.4) 
 
+
+ggplot(as.data.frame(result)) +
+  geom_point(aes(x = preference_error_sum, y = preference_lpdf,  color = lp__))
 
 ```
 
