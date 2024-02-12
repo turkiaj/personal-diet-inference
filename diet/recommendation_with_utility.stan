@@ -74,34 +74,28 @@ data {
 
     real bound_steepness;      // l1: steepness of single soft bound
     real bound_requirement;    // l2: steepness of meeting all the bounds
-    real preference_strength;  // l3: preference requirement (estimated, remvoe?)
-    real transition_steepness; // l4: transition steepness between mixture components (is in_range necessary, remove?)
+    real preference_strength;  // l3: preference requirement 
+    real transition_steepness; // l4: transition steepness between mixture components 
     real penalty_rate;         // l5: Exponential penalty_rate of preference error
+    
+    int verbose;
 }
 
 transformed data {
 
   // This is theoritical maximum error with current intake, personal effects and limits
   real max_personal_preference_error = max_preference_error(Q_beta_point, current_Q, proposal_lowerlimits, proposal_upperlimits, r, responses, penalty_rate);
-  
-  //print("max_personal_preference_error:");
-  //print(max_personal_preference_error);
 
-  // Here we calculate error threshold (x) for given preference_strength parameter (lambda)  
-  real preference_error_threshold = 1;
-  
-  {
-    real numerical_accuracy = machine_precision();
-    real simulated_preference_pdf = 100;
+  // Calculate preference strength inversely non-linearly related to max_personal_preference_error
+  // Here, 0.01 is baseline constant to prevent division by zero and set a baseline strength and
+  // preference_strength parameter is an adjustment factor to scale the impact of max_personal_preference_error
 
-    while (simulated_preference_pdf > numerical_accuracy) {
-       simulated_preference_pdf = preference_strength * exp(-preference_strength * preference_error_threshold);
-       preference_error_threshold = preference_error_threshold + 1;
-    }
+  real personal_preference_strength = 1 / (0.01 + preference_strength * pow(max_personal_preference_error, penalty_rate));
+
+  if (verbose == 1) {
+    print("max_personal_preference_error: ", max_personal_preference_error);
+    print("personal_preference_strength: ", personal_preference_strength);
   }
-
-  //print("preference_error_threshold");
-  //print(preference_error_threshold);
 
   // Estimated value of concentration without the queried predictors (mu_q0)
   // This part of the expected value (mu) does not change during the sampling
@@ -169,17 +163,14 @@ transformed parameters {
 
   preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
   
-  // scale preference_error_sum that it does not go over the calculated threshold 
-  preference_error_sum = preference_error_sum * (preference_error_threshold / max_personal_preference_error);
-
-  preference_lpdf = exponential_lpdf(preference_error_sum | preference_strength);
+  preference_lpdf = exponential_lpdf(preference_error_sum | personal_preference_strength);
   
-  //print(preference_error_sum);
+  if (verbose == 1) {
+    print(preference_error_sum);
+  }
 }
 
 model {
-  
-  //real Y_range;
   
   // PRIORS
   
@@ -187,14 +178,6 @@ model {
   for (i in 1:r) {
     target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
   }
-  
-  //target += normal_lpdf(personal_preference_strength | 5, 10);
-
-  // center of concentration normal ranges can be slightly preferred
-  //for (m in 1:responses) {
-  //   Y_range = Y_upper_limits[m]-Y_lower_limits[m];
-  //   target += normal_lpdf(Y_mu[m] | Y_lower_limits[m] + Y_range/2, Y_range*2);
-  //}
   
   // POSTERIOR
 
@@ -204,15 +187,4 @@ model {
   // Random variables are dependent through in_range-coefficient and thus multiplied
   target += log((1-in_range) * exp(in_concentration_range_lpdf));
   target += log(in_range * exp(preference_lpdf));
-  
 }
-
-// generated quantities {
-  
-// Sensitivity analysis of recommendations could be calculated here
-// Seek how much the recommendations can be altered before the concentrations go beyond their limits
-//   Y_mu_pred[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
-// }
-
-
-

@@ -305,6 +305,14 @@ for (person_id in 1:length(kontrolli)) {
 
 ```
 
+```{r}
+preference_strength <- 0.0000003
+penalty_rate <- 2
+max_personal_preference_error <- 800
+
+1 / (0.01 + preference_strength * max_personal_preference_error^penalty_rate);
+
+```
 
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
@@ -361,7 +369,9 @@ kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 for (person_id in 1:length(kontrolli)) {
 #for (person_id in 2:2) {
   
-  #person_id <- 3
+  # problem person_id <- 10 and 29
+  #person_id <- 10 could not be inferred. study this case!
+  #person_id <- 29
 
   subject_code <- kontrolli[person_id]
 
@@ -400,7 +410,7 @@ for (person_id in 1:length(kontrolli)) {
                                verbose = 0,
                                l1 = 8,
                                l2 = 15,
-                               l3 = 100000,
+                               l3 = 0.00001,
                                l4 = 30,
                                l5 = 2)
 
@@ -494,65 +504,6 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
 
 ```
-
-```{r}
-library(ggplot2)
-
-max_error <- 30  # includes penalty l5
-preference_strength <- 2
-numerical_accuracy <- 0.00000000001
-
-simulated_preference_pdf <- 100
-
-# minimum error
-preference_error_threshold <- 1
-
-while (simulated_preference_pdf > numerical_accuracy) {
-  
-  simulated_preference_pdf <- preference_error_threshold * exp(-preference_strength * preference_error_threshold)
-
-  print(preference_error_threshold)
-  print(simulated_preference_pdf)
-
-  preference_error_threshold <- preference_error_threshold + 1;
-}
-
-#preference_strength * exp(-preference_strength * preference_error_sum)
-#dexp(preference_error_sum, preference_strength)
-
-
-# Sample maximum error values, growing exponentially
-max_err <- c(738, 6123, 863860)
-case <- 3
-
-#preference_strength <- -log(1 - 0.8) / max_err;
-
-# Function to calculate preference strength based on max error
-calc_preference_strength <- function(max_err) {
-  # Parameters to scale and adjust the transformation, as needed
-  base_strength <- 5  # Base or maximum possible strength
-  scaling_factor <- 100000  # Adjusts the sensitivity to max_err changes
-  
-  # Calculate preference strength inversely related to log of max_err
-  strength <- base_strength - log(max_err + 1) / log(scaling_factor + 1) * (base_strength - 1)
-  
-  # Ensure strength is within the range [1, base_strength]
-  return(max(1, min(base_strength, strength)))
-}
-
-# Example of calculating and plotting for the first max_err value
-preference_strength <- calc_preference_strength(max_err[case])
-
-error_values <- seq(0, max_err[case], by = 1)
-pdf_values <- dexp(error_values, rate = preference_strength)
-
-ggplot(data = data.frame(error_values, pdf_values), aes(x = error_values, y = pdf_values)) +
-  geom_line(color = "blue") +
-  ggtitle(paste("Exponential Distribution with Preference Strength =", preference_strength))
-
-
-```
-
 
 
 ```{r}
@@ -1279,7 +1230,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 subjects_with_failed_concs <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
 
-sysdimet_lp_plots(subjects_with_failed_concs$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
+sysdimet_lp_plots(subjects_with_failed_concs[1:7,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
 
 ```
 
