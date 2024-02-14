@@ -173,10 +173,14 @@ transformed parameters {
 model {
   
   // PRIORS
+
+  real pref_sigma; // Adjust this value as needed for the general preference strength
   
-  // nutrient proposals are taken from uniform distribution
   for (i in 1:r) {
-    target += uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]);
+    pref_sigma = (proposal_upperlimits[i] - proposal_lowerlimits[i]) / 10;
+    target += log_mix(0.5,
+                    uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]), // Uniform distribution
+                    normal_lpdf(Q[i] | general_RI[i], pref_sigma)); // Gaussian distribution centered around general_RI[i]
   }
   
   // POSTERIOR

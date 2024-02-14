@@ -373,6 +373,8 @@ for (person_id in 1:length(kontrolli)) {
   #person_id <- 10 could not be inferred. study this case!
   #person_id <- 29
 
+  #person_id <- 23
+
   subject_code <- kontrolli[person_id]
 
   # Normal ranges of concentration are personalized
@@ -600,6 +602,16 @@ ggplot(intake_proposals.df) + geom_density(aes(x=epa), color="darkblue", fill="l
 
 ggplot(as.data.frame(result)) +
   geom_point(aes(x = preference_error_sum, y = preference_lpdf,  color = lp__))
+
+
+Q_effects <- colMeans(result$Q_effects[,3,])
+
+result$Q[,13]
+
+
+ggplot(intake_proposals.df) + geom_density(aes(x=cvit), color="darkblue", fill="lightblue") + 
+  geom_vline(xintercept = mean(intake_proposals.df$cvit), linetype="dashed", color = "black", linewidth=0.4) 
+
 
 ```
 
@@ -1230,7 +1242,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 subjects_with_failed_concs <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
 
-sysdimet_lp_plots(subjects_with_failed_concs[1:7,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
+sysdimet_lp_plots(subjects_with_failed_concs[1:7,]$subject_code, "figures/sysdimet_fixed_concentrations_genRI.pdf")
 
 ```
 
@@ -1476,7 +1488,7 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
    column_spec(14, color = fixed_concs.df[,29], bold = fixed_concs.df[,44], underline = fixed_concs.df[,29] == FALSE) %>%
    column_spec(15, color = fixed_concs.df[,30], bold = fixed_concs.df[,45], underline = fixed_concs.df[,30] == FALSE) %>%
    column_spec(16, color = fixed_concs.df[,31], bold = fixed_concs.df[,46], underline = fixed_concs.df[,31] == FALSE) %>%
-   save_kable(file = "tables/recommendations_sysdimet_change.pdf", keep_tex = TRUE)
+   save_kable(file = "tables/recommendations_sysdimet_change_genRI.pdf", keep_tex = TRUE)
 
 
 ```
