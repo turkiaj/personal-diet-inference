@@ -366,14 +366,14 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-for (person_id in 1:length(kontrolli)) {
-#for (person_id in 2:2) {
+#for (person_id in 1:length(kontrolli)) {
+for (person_id in 2:2) {
   
   # problem person_id <- 10 and 29
   #person_id <- 10 could not be inferred. study this case!
   #person_id <- 29
 
-  #person_id <- 23
+  person_id <- 1
 
   subject_code <- kontrolli[person_id]
 
@@ -414,7 +414,8 @@ for (person_id in 1:length(kontrolli)) {
                                l2 = 15,
                                l3 = 0.00001,
                                l4 = 30,
-                               l5 = 2)
+                               l5 = 2,
+                               l6 = 10)
 
         #params <- readRDS("last_params.rds")
         #params
@@ -545,28 +546,26 @@ mean(recommendation_intake.df$epa)
 mean(recommendation_intake.df$dvit)  
 mean(recommendation_intake.df$kuitu)  # P3, kuitu 21
 
-Q_effects <- colMeans(result$Q_effects[,3,])
 Q_diffs <- colMeans(result$Q_diffs)
+
+Q_effects <- colMeans(rbind(colMeans(abs(result$Q_effects[,1,])), colMeans(abs(result$Q_effects[,2,])), colMeans(abs(result$Q_effects[,3,])), colMeans(abs(result$Q_effects[,4,])), colMeans(abs(result$Q_effects[,5,]))))
+
+Q_cont <- colMeans(rbind(colMeans(abs(result$Q_contributions[,1,])), colMeans(abs(result$Q_contributions[,2,])), colMeans(abs(result$Q_contributions[,3,])), colMeans(abs(result$Q_contributions[,4,])), colMeans(abs(result$Q_contributions[,5,]))))
 
 ggplot(data.frame(Q_effects, Q_diffs, queried_nodes)) +
   geom_text(aes(x = Q_effects, y = Q_diffs, label = queried_nodes)) 
 
+ggplot(data.frame(Q_cont, Q_diffs, queried_nodes)) +
+  geom_text(aes(x = Q_cont, y = Q_diffs, label = queried_nodes)) 
+
 recommendation_intake.df$Q_effects <- Q_effects
 recommendation_intake.df$Q_diffs <- Q_diffs
-
-for (i in 1:100) {
-  print((1 - result$Q_effects)[1,] %*% result$Q_diffs[i,])
-}
 
 df <- data.frame(Q_effects, Q_diffs, queried_nodes)
 
 ggplot(data.frame(Q_effects, Q_diffs, queried_nodes)) +
   geom_text(aes(x = Q_effects, y = Q_diffs, label = queried_nodes)) 
 
-# fsins odotusarvo.. rakenna tämä 
-
-rowSums(result$Q_effects[,3,])
-mean(result$Y_mu[,3])
 
 #queried_nodes
 #[1] "sakkaroosiepros" "protepros"       "hhepros"         "safaepros"       "mufaepros"       "pufaepros"       "kuitu"           "dvit"            "linoliepros"    
@@ -602,12 +601,6 @@ ggplot(intake_proposals.df) + geom_density(aes(x=epa), color="darkblue", fill="l
 
 ggplot(as.data.frame(result)) +
   geom_point(aes(x = preference_error_sum, y = preference_lpdf,  color = lp__))
-
-
-Q_effects <- colMeans(result$Q_effects[,3,])
-
-result$Q[,13]
-
 
 ggplot(intake_proposals.df) + geom_density(aes(x=cvit), color="darkblue", fill="lightblue") + 
   geom_vline(xintercept = mean(intake_proposals.df$cvit), linetype="dashed", color = "black", linewidth=0.4) 

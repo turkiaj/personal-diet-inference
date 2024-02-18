@@ -1,95 +1,65 @@
 functions {
-  
-  // This function defines a custom probability distribution that receives 
-  // its maximum value when the current diet proposal is closest to most preferred diet
-  real preference_error(vector Q_diffs, vector beta, int r) {
+  // Calculates the error in dietary preference by minimizing the weighted differences between current and proposed diets
+  // The function emphasizes changes in nutrients with stronger effects, aiming for minimal overall diet change
+  real preference_error(vector Q_diffs, vector beta, int nutrients, real penalty) {
     
-    // This function prefers such a personal diet proposal that is closest to person's current diet
-    // and it is achieved by minimizing the absolute sum of squares between personal recommendations (Q) and current personal levels of RI
+    // Weights the differences using the inverse of nutrient effects to prioritize changes in nutrients with more significant impacts
+    vector[nutrients] inverse_beta = 1 ./ (1+fabs(beta));
     
-    // Multiply difference elementwise with inverse of personal effect. This prefers changes in nutrients having stronger effect. 
-    // So, nutrients with stronger effects are allowed to change more
-
-    vector[r] inverse_beta = 1 ./ (1+fabs(beta));
-    
-    // Q_diffs = fabs(Q - current_Q) is pre-calculated as a model parameter for analysis
+    // Computes the weighted sum of differences
     real weighted_diffs = dot_product(inverse_beta, Q_diffs);
 
-    // resulting error is scaled with the number of predictors
-    return weighted_diffs / r;
+    // Normalizes the error by the number of nutrients
+    return pow(weighted_diffs / nutrients, penalty);
   }
-  
-  // Function calculates maximum preference error given the data of proposed intake limits and personal reactions (beta) 
-  real max_preference_error(vector[] Q_beta_point, vector current_Q, vector proposal_lowerlimits, vector proposal_upperlimits, int r, int responses, real penalty_rate) {
-
-    vector[r] Q_max_diffs;
-    real preference_error_sum = 0;
-
-    for (m in 1:responses) {
-
-      for (i in 1:r) {
-        // Calculate maximum relative differences
-        if (current_Q[i] != 0) {
-            Q_max_diffs[i] = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i])) / fabs(current_Q[i]);
-        } else {
-            Q_max_diffs[i] = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i]));
-        }
-      }
-
-      preference_error_sum += preference_error(Q_max_diffs, Q_beta_point[m], r);
-    }
-
-    preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
-
-    return preference_error_sum;
-  }
-  
 }
 
 data {
-    int<lower=1> responses;        // number of responses
-    int<lower=1> p;                // number of predictors
-    int<lower=0> r;                // number of conditioned predictors
-    vector[r] proposal_lowerlimits; // lower limits of proposed nutrient intake   
-    vector[r] proposal_upperlimits; // upper limits of proposed nutrient intake    
-    vector[r] general_RI;        // general intake recommendation for calculating the preference function
-    vector[r] current_Q;         // current personal intake level for calculating the preference function 
-    real Y_lower_limits[responses];        // lower limits of concentrations
-    real Y_upper_limits[responses];        // upper limits of concentrations      
+    int<lower=1> responses;          // Total number of individual responses
+    int<lower=1> p;                  // Number of predictors
+    int<lower=0> r;                  // Number of nutrients considered
+    vector[r] proposal_lowerlimits;  // Lower intake limits for each nutrient
+    vector[r] proposal_upperlimits;  // Upper intake limits for each nutrient   
+    vector[r] general_RI;            // General intake recommendations
+    vector[r] current_Q;             // Current nutrient intake levels
+    real Y_lower_limits[responses];  // Lower concentration limits
+    real Y_upper_limits[responses];  // Upper concentration limits
 
-    int posterior_samples;      // number of samples to draw from predicted concentration distrubution
-
-    // point estimates from parameter posteriors (CI5%, CI95%, median..)
-    // - these point estimates are used instead of full posterior distributions for 
-    // making the proposed intake distributions Q more concise
-    real intercept_point[responses];     
-    real alpha_point[responses];         
-    vector[p] X_beta_point[responses];   //  strength coefficients of personal effects for fixed level nutrients 
-    vector[r] Q_beta_point[responses];   //  strength coefficients of personal effects for inferred nutrient levels
-    
-    // sufficient statistics of nutrient variables X
+    // Personal nutritional effects
+    real intercept_point[responses];     // Baseline intercepts from parameter distributions
+    vector[p] X_beta_point[responses];   // Personal effect coefficients for fixed-level nutrients
+    vector[r] Q_beta_point[responses];   // Personal effect coefficients for variable nutrient levels
     vector[p] X_evidence_point;
     
-    real linear_transformation;
-
-    real bound_steepness;      // l1: steepness of single soft bound
-    real bound_requirement;    // l2: steepness of meeting all the bounds
-    real preference_strength;  // l3: preference requirement 
-    real transition_steepness; // l4: transition steepness between mixture components 
-    real penalty_rate;         // l5: Exponential penalty_rate of preference error
+    // Inference hyperparameters
+    real bound_steepness;                // l1: Steepness parameter for individual soft bounds
+    real bound_requirement;              // l2: Requirement for meeting all bounds
+    real preference_strength;            // l3: Weighting for preference in the model
+    real transition_steepness;           // l4: Steepness for the transition between model components
+    real penalty_rate;                   // l5: Rate at which preference errors are penalized
+    real general_recommendation_prior;   // l6: Weight for general recommendation in proposal distributions
     
-    int verbose;
+    int verbose;                         // Flag for verbose output
 }
 
 transformed data {
 
-  // This is theoritical maximum error with current intake, personal effects and limits
-  real max_personal_preference_error = max_preference_error(Q_beta_point, current_Q, proposal_lowerlimits, proposal_upperlimits, r, responses, penalty_rate);
+  // Calculates maximum preference error for adjusting the personal preference strength
+  real max_personal_preference_error = 0;
+  for (m in 1:responses) {
+    vector[r] Q_max_diffs;
+    for (i in 1:r) {
+      real max_diff = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i]));
+      Q_max_diffs[i] = current_Q[i] != 0 ? max_diff / fabs(current_Q[i]) : max_diff;
+    }
+    max_personal_preference_error += preference_error(Q_max_diffs, Q_beta_point[m], r, penalty_rate);
+  }
+  
+  // Normalize the sum of penalized preference errors by the number of responses
+  max_personal_preference_error /= responses;
 
-  // Calculate preference strength inversely non-linearly related to max_personal_preference_error
-  // Here, 0.01 is baseline constant to prevent division by zero and set a baseline strength and
-  // preference_strength parameter is an adjustment factor to scale the impact of max_personal_preference_error
-
+  // Calculates preference strength inversely and non-linearly related to the maximum preference error
+  // - the constant 0.01 prevents division by zero and ensures that the preference strength does not become infinitely large
   real personal_preference_strength = 1 / (0.01 + preference_strength * pow(max_personal_preference_error, penalty_rate));
 
   if (verbose == 1) {
@@ -97,8 +67,7 @@ transformed data {
     print("personal_preference_strength: ", personal_preference_strength);
   }
 
-  // Estimated value of concentration without the queried predictors (mu_q0)
-  // This part of the expected value (mu) does not change during the sampling
+  // Calculates the expected concentration value excluding queried predictors, remaining constant during sampling
   real mu_q0[responses];
   
   for (m in 1:responses) {
@@ -107,63 +76,56 @@ transformed data {
 }
 
 parameters {
- 
-  // Resulting parameters of this inference are these personal recommendations for intake proposals Q
-  // Each nutrient Q is given lower and upperlimits for its recommendation
+  // Resulting personalized nutrient intake recommendations
   vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
 }
 
 transformed parameters {
 
-  real in_concentration_range_lpdf;
-  real preference_lpdf;
-  real in_range;
-  real Y_mu[responses];
-  real Y_bound[responses*2];
-  real softbound_sum = 0;
-  real preference_error_sum = 0;
-  vector[r] Q_effects[responses];
-  vector[r] Q_diffs;
+  real Y_mu[responses];      // Expected concentration levels for proposed diets
+  real Y_bound[responses*2]; // Sigmoid values indicating when concentration limits are met
+  real softbound_sum = 0;    // Sum of sigmoid values, with a maximum of 2*responses
+
+  real in_concentration_range_lpdf; // Log probability of meeting all concentration limits
+  real preference_lpdf;             // Log probability of adherence to personal dietary preferences
+  real preference_error_sum = 0;    // Sum of dietary preference errors
+  real in_range;                    // Indicates whether all concentration limits have been met
   
-  // Probability of reaching the concentrations limits
+  vector[r] Q_effects[responses];   // Effects of nutrient intake changes per response
+  vector[r] Q_diffs;                // Nutrient intake differences
+  vector[r] Q_contributions[responses];        // Normalized contribution of nutrient on concentrations 
+  
+  // Computes expected values and adherence to concentration limits for each response
   for (m in 1:responses) {
     Y_mu[m] = mu_q0[m] + dot_product(Q, Q_beta_point[m]);
   
-    // lower bound sigmoid    
+    // Calculates sigmoid values for concentration bounds
     Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
-    
-    // upper bound sigmoid
     Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
-    
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
-    
+
+    // Computes relative differences and errors for dietary preferences
     for (i in 1:r) {
-        // Calculate relative differences
-        if (current_Q[i] != 0) {
-            Q_diffs[i] = fabs(Q[i] - current_Q[i]) / fabs(current_Q[i]);
-        } else {
-            Q_diffs[i] = fabs(Q[i] - current_Q[i]);
-        }
-    }    
+      Q_diffs[i] = current_Q[i] != 0 ? fabs(Q[i] - current_Q[i]) ./ fabs(current_Q[i]) : fabs(Q[i] - current_Q[i]);
+    }
     
-    preference_error_sum += preference_error(Q_diffs, Q_beta_point[m], r);
+    preference_error_sum += preference_error(Q_diffs, Q_beta_point[m], r, penalty_rate);
     
-    Q_effects[m] = Q_beta_point[m] .* Q;
+    // Returns normalized nutrient effects for analysis
+    Q_effects[m] = Q_beta_point[m];
+
+    // Returns normalized nutrient contributions to concentrations
+    Q_contributions[m] = Q_beta_point[m] .* Q;
   }
 
-  // transition coefficient (from 0 to 1) when all the concentration bounds are met
-  // - epsilon 0.1 defines an allowed gap to maximum boundsum so that sigmoid is pushed to 1
-  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
-  
-  // normal distribution is used for concentration bounds as we require that all bounds are fulfilled
+  // Log probabilities for concentration and preference components
   in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
-  
-  // make preference_error_sum invariant to number of concentrations (responses)
-  // also penalize bigger preference errors with power growth
-
-  preference_error_sum = pow(preference_error_sum / responses, penalty_rate);
-  
+  preference_error_sum /= responses;
   preference_lpdf = exponential_lpdf(preference_error_sum | personal_preference_strength);
+
+  // Sigmoid coefficient for transitioning between model components
+  // - subtracting the constant 0.1 adjusts the sigmoid to reach maximum when all limits are met  
+  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
   
   if (verbose == 1) {
     print(preference_error_sum);
@@ -172,23 +134,15 @@ transformed parameters {
 
 model {
   
-  // PRIORS
-
-  real pref_sigma; // Adjust this value as needed for the general preference strength
-  
+  // PRIORS: Mixture distribution prior for nutrient proposals, with adjustable favor of general recommendations within the specified range
   for (i in 1:r) {
-    pref_sigma = (proposal_upperlimits[i] - proposal_lowerlimits[i]) / 10;
+    real pref_sigma = (proposal_upperlimits[i] - proposal_lowerlimits[i]) / general_recommendation_prior;
     target += log_mix(0.5,
-                    uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]), // Uniform distribution
-                    normal_lpdf(Q[i] | general_RI[i], pref_sigma)); // Gaussian distribution centered around general_RI[i]
+                    uniform_lpdf(Q[i] | proposal_lowerlimits[i], proposal_upperlimits[i]),
+                    normal_lpdf(Q[i] | general_RI[i], pref_sigma));
   }
   
-  // POSTERIOR
-
-  // in_range-coefficient provides steep but smooth transition between the mixture components
-  // it also ensures that preference is not considered before all the concentration limits are satisfied
-
-  // Random variables are dependent through in_range-coefficient and thus multiplied
+  // POSTERIOR: Mixture model that first aims to reach the concentration targets and then follows the diet preference
   target += log((1-in_range) * exp(in_concentration_range_lpdf));
   target += log(in_range * exp(preference_lpdf));
 }
