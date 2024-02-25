@@ -1,35 +1,53 @@
 functions {
-  // Calculates the error in dietary preference by minimizing the weighted differences between current and proposed diets
+  // Function calculates the error in dietary preference by minimizing the weighted differences between the proposed and a given reference diet
   // The function emphasizes changes in nutrients with stronger effects, aiming for minimal overall diet change
-  real preference_error(vector Q_diffs, vector beta, int nutrients, real penalty) {
-    
-    // Weights the differences using the inverse of nutrient effects to prioritize changes in nutrients with more significant impacts
-    vector[nutrients] inverse_beta = 1 ./ (1+fabs(beta));
-    
-    // Computes the weighted sum of differences
-    real weighted_diffs = dot_product(inverse_beta, Q_diffs);
+  real preference_error(row_vector Q, row_vector reference_Q, row_vector[] beta, int nutrients, int responses, real penalty) {
 
-    // Normalizes the error by the number of nutrients
-    return pow(weighted_diffs / nutrients, penalty);
+    real error_sum = 0;
+    row_vector[nutrients] Q_diffs;
+
+    for (m in 1:responses) {
+      for (i in 1:nutrients) {
+        
+        // Calculate difference between the proposed Q and given reference level 
+        if (size(reference_Q) == size(Q)) {
+          Q_diffs[i] = reference_Q[i] != 0 ? fabs(Q[i] - reference_Q[i]) ./ fabs(reference_Q[i]) : fabs(Q[i] - reference_Q[i]);
+        } else {
+          // In calculating maximum error, we compare to both lower and upper limits. 
+          real max_diff = fmax(fabs(reference_Q[i] - Q[i]), fabs(reference_Q[nutrients+i] - Q[i]));
+          Q_diffs[i] = Q[i] != 0 ? max_diff / fabs(Q[i]) : max_diff;
+        }
+      }
+
+      // Weights the differences using the inverse of nutrient effects to prioritize changes in nutrients with more significant impacts
+      row_vector[nutrients] inverse_beta = 1 ./ (1+fabs(beta[m]));
+      real weighted_diffs = dot_product(inverse_beta, Q_diffs);
+      
+      // Penalize bigger differences with power function
+      error_sum += pow(weighted_diffs / nutrients, penalty);
+    }
+
+    // Normalize the sum of penalized preference errors by the number of responses
+    return error_sum / responses;
   }
 }
 
 data {
-    int<lower=1> responses;          // Total number of individual responses
-    int<lower=1> p;                  // Number of predictors
-    int<lower=0> r;                  // Number of nutrients considered
-    vector[r] proposal_lowerlimits;  // Lower intake limits for each nutrient
-    vector[r] proposal_upperlimits;  // Upper intake limits for each nutrient   
-    vector[r] general_RI;            // General intake recommendations
-    vector[r] current_Q;             // Current nutrient intake levels
-    real Y_lower_limits[responses];  // Lower concentration limits
-    real Y_upper_limits[responses];  // Upper concentration limits
+    int<lower=1> responses;              // Total number of individual responses
+    int<lower=1> p;                      // Number of predictors
+    int<lower=0> r;                      // Number of nutrients considered
+    row_vector[r] proposal_lowerlimits;  // Lower intake limits for each nutrient
+    row_vector[r] proposal_upperlimits;  // Upper intake limits for each nutrient   
+    row_vector[r] general_RI;            // General intake recommendations
+    row_vector[r] current_Q;             // Current nutrient intake levels
+    real Y_lower_limits[responses];      // Lower concentration limits
+    real Y_upper_limits[responses];      // Upper concentration limits
 
     // Personal nutritional effects
-    real intercept_point[responses];     // Baseline intercepts from parameter distributions
-    vector[p] X_beta_point[responses];   // Personal effect coefficients for fixed-level nutrients
-    vector[r] Q_beta_point[responses];   // Personal effect coefficients for variable nutrient levels
-    vector[p] X_evidence_point;
+    real intercept_point[responses];       // Baseline intercepts from parameter distributions
+    row_vector[p] X_beta_point[responses]; // Personal effect coefficients for fixed-level nutrients
+    row_vector[r] Q_beta_point[responses]; // Personal effect coefficients for variable nutrient levels
+    row_vector[p] X_evidence_point;
     
     // Inference hyperparameters
     real bound_steepness;                // l1: Steepness parameter for individual soft bounds
@@ -44,20 +62,9 @@ data {
 
 transformed data {
 
-  // Calculates maximum preference error for adjusting the personal preference strength
-  real max_personal_preference_error = 0;
-  for (m in 1:responses) {
-    vector[r] Q_max_diffs;
-    for (i in 1:r) {
-      real max_diff = fmax(fabs(proposal_lowerlimits[i] - current_Q[i]), fabs(proposal_upperlimits[i] - current_Q[i]));
-      Q_max_diffs[i] = current_Q[i] != 0 ? max_diff / fabs(current_Q[i]) : max_diff;
-    }
-    max_personal_preference_error += preference_error(Q_max_diffs, Q_beta_point[m], r, penalty_rate);
-  }
+  // Calculate personal maximum preference error by combining the current diet to lower and upper intake limits  
+  real max_personal_preference_error = preference_error(current_Q, append_col(proposal_lowerlimits, proposal_upperlimits), Q_beta_point, r, responses, penalty_rate);
   
-  // Normalize the sum of penalized preference errors by the number of responses
-  max_personal_preference_error /= responses;
-
   // Calculates preference strength inversely and non-linearly related to the maximum preference error
   // - the constant 0.01 prevents division by zero and ensures that the preference strength does not become infinitely large
   real personal_preference_strength = 1 / (0.01 + preference_strength * pow(max_personal_preference_error, penalty_rate));
@@ -77,23 +84,22 @@ transformed data {
 
 parameters {
   // Resulting personalized nutrient intake recommendations
-  vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
+  row_vector<lower=proposal_lowerlimits, upper=proposal_upperlimits>[r] Q;
 }
 
 transformed parameters {
 
-  real Y_mu[responses];      // Expected concentration levels for proposed diets
-  real Y_bound[responses*2]; // Sigmoid values indicating when concentration limits are met
-  real softbound_sum = 0;    // Sum of sigmoid values, with a maximum of 2*responses
+  real Y_mu[responses];             // Expected concentration levels for proposed diets
+  real Y_mu_Q0[responses] = mu_q0;  // Concentration level when only the fixed factors are considered and all of Q are 0
+  real Y_bound[responses*2];        // Sigmoid values indicating when concentration limits are met
+  real softbound_sum = 0;           // Sum of sigmoid values, with a maximum of 2*responses
 
   real in_concentration_range_lpdf; // Log probability of meeting all concentration limits
   real preference_lpdf;             // Log probability of adherence to personal dietary preferences
   real preference_error_sum = 0;    // Sum of dietary preference errors
   real in_range;                    // Indicates whether all concentration limits have been met
   
-  vector[r] Q_effects[responses];   // Effects of nutrient intake changes per response
-  vector[r] Q_diffs;                // Nutrient intake differences
-  vector[r] Q_contributions[responses];        // Normalized contribution of nutrient on concentrations 
+  row_vector[r] Q_contributions[responses];        // Normalized contribution of nutrient on concentrations 
   
   // Computes expected values and adherence to concentration limits for each response
   for (m in 1:responses) {
@@ -104,23 +110,14 @@ transformed parameters {
     Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
     softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
 
-    // Computes relative differences and errors for dietary preferences
-    for (i in 1:r) {
-      Q_diffs[i] = current_Q[i] != 0 ? fabs(Q[i] - current_Q[i]) ./ fabs(current_Q[i]) : fabs(Q[i] - current_Q[i]);
-    }
-    
-    preference_error_sum += preference_error(Q_diffs, Q_beta_point[m], r, penalty_rate);
-    
-    // Returns normalized nutrient effects for analysis
-    Q_effects[m] = Q_beta_point[m];
-
     // Returns normalized nutrient contributions to concentrations
     Q_contributions[m] = Q_beta_point[m] .* Q;
   }
 
   // Log probabilities for concentration and preference components
   in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
-  preference_error_sum /= responses;
+
+  preference_error_sum = preference_error(Q, current_Q, Q_beta_point, r, responses, penalty_rate);
   preference_lpdf = exponential_lpdf(preference_error_sum | personal_preference_strength);
 
   // Sigmoid coefficient for transitioning between model components
