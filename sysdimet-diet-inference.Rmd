@@ -77,6 +77,37 @@ sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,]
 
 ```
 
+
+```{r}
+
+mean(sysdimet[sysdimet$sukupuoli == 0,]$fshdl) # male
+mean(sysdimet[sysdimet$sukupuoli == 1,]$fshdl) # female
+
+sd(sysdimet[sysdimet$sukupuoli == 0,]$fshdl) # male
+sd(sysdimet[sysdimet$sukupuoli == 1,]$fshdl) # female
+
+mean(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fsldl)
+sd(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fsldl)
+
+mean(sysdimet[sysdimet$ika >= 50,]$fsldl)
+sd(sysdimet[sysdimet$ika >= 50,]$fsldl)
+
+
+mean(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fskol)
+sd(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fskol)
+
+mean(sysdimet[sysdimet$ika >= 50,]$fskol)
+sd(sysdimet[sysdimet$ika >= 50,]$fskol)
+
+mean(sysdimet$fsins)
+sd(sysdimet$fsins)
+
+mean(sysdimet$fpgluk)
+sd(sysdimet$fpgluk)
+
+```
+
+
 ```{r graph, fig.height = 4, fig.width=5, echo=FALSE, fig.align = "left", fig.cap="Initial, bi-partite, network structure. The figure is plotted with iGraph package for R language (v 1.2.6, https://igraph.org/r).", echo=FALSE, message=FALSE}
 library(igraph)
 initial_graph <- mebn.fully_connected_bipartite_graph(sysdimet_datadesc)
@@ -90,7 +121,7 @@ gap <- 6
 bipa_layout <- cbind(bipa_layout[,2]*gap, bipa_layout[,1])
 
 V(initial_graph)[V(initial_graph)$type == "100"]$label.degree = pi # left side
-V(initial_graph)[V(initial_graph)$type == "200"]$label.degree = 0 # right side
+V(initial_graph)[V(initial_graph)$type == "200"]$label.degree = 0 # right side 1.53
 
 plot(initial_graph,
        layout=bipa_layout, 
@@ -274,6 +305,7 @@ library(gridExtra)
   
 # Query parameters
 simulation <- "X50_B50_A50_I50"
+simulation <- "_lowEPA"
 
 # - data parameters
 graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
@@ -313,8 +345,8 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-for (person_id in 1:length(kontrolli)) {
-#for (person_id in 2:2) {
+#for (person_id in 1:length(kontrolli)) {
+for (person_id in 2:2) {
   
   # problem person_id <- 10 and 29
   #person_id <- 10 could not be inferred. study this case!
@@ -349,7 +381,7 @@ for (person_id in 1:length(kontrolli)) {
                                proposal_lowerlimits = lowerbounds,
                                proposal_upperlimits = upperbounds,
                                general_RI = RI,
-                               stan_model_file = "diet/recommendation_with_utility.stan",
+                               stan_model_file = "diet/recommendation_model.stan",
                                conc_lower_limits = as.vector(recommeded_concentrations$lower_limits),
                                conc_upper_limits = as.vector(recommeded_concentrations$upper_limits),
                                beta_point_est = "mean",
@@ -900,25 +932,13 @@ recommendation_table.df <- intake.df %>%
                                             .names = "{.col}")) %>%
                               select(c("subject_code", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold"), "subject_code"))
 
-
-
-# lisää tämä CI taulukkoon
-
-
-                                              # format(round(get(glue::glue("{cur_column()}_lCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                              #        nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
-                                              # "; ", 
-                                              # format(round(get(glue::glue("{cur_column()}_uCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                              #        nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                              # "\\right]}}$",
-
 # Render PDF table and keep .tex 
 
 fixed_concs.df <- recommendation_table.df[recommendation_table.df$subject_code %in% subjects_with_failed_concs$subject_code,]
 
 kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",16)), 
    col.names = table_colnames,
-   caption = "Personally recommended intake (RI) for Sysdimet study subjects with lower and upper limits of recommendations.") %>%
+   caption = "Personal intake recommendations for Sysdimet study control cohort with the current intake, recommendation most fitting to model, and 90\\%-probability range of recommendations.") %>%
     kable_styling(latex_options="scale_down") %>%  
     kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
    row_spec(0,bold=TRUE) %>%
