@@ -65,11 +65,12 @@ transformed data {
   // Calculate personal maximum preference error by combining the current diet to lower and upper intake limits  
   real max_personal_preference_error = preference_error(current_Q, append_col(proposal_lowerlimits, proposal_upperlimits), Q_beta_point, r, responses, penalty_rate);
   
-  // Calculates preference strength inversely and non-linearly related to the maximum preference error
-  // - the constant 0.01 prevents division by zero and ensures that the preference strength does not become infinitely large
-  real personal_preference_strength = 1 / (0.01 + preference_strength * pow(max_personal_preference_error, penalty_rate));
+  real lambda_k = -lambert_w0(-machine_precision()/max_personal_preference_error) / max_personal_preference_error;
+
+  real personal_preference_strength = lambda_k + pow(preference_strength, penalty_rate) / max_personal_preference_error;
 
   if (verbose == 1) {
+    print("lambda_k: ", lambda_k);
     print("max_personal_preference_error: ", max_personal_preference_error);
     print("personal_preference_strength: ", personal_preference_strength);
   }
@@ -124,7 +125,7 @@ transformed parameters {
   in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
   
   if (verbose == 1) {
-    print(preference_error_sum);
+    //print(preference_error_sum);
   }
 }
 

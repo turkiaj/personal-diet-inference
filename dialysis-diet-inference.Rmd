@@ -426,6 +426,23 @@ for (graph_person_id in 1:37) {
 
 ```
 
+```{r}
+library(gsl)
+
+max_personal_preference_error <- 674383
+
+personal_preference_strength: 0.148064
+
+e <- 0.0001
+
+lambda_k <- -lambert_W0(-e/max_personal_preference_error) / max_personal_preference_error
+
+lambda_k
+
+lambda_k + 1 / (max_personal_preference_error / 100)
+
+```
+
 
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
@@ -502,15 +519,13 @@ for (graph_person_id in 1:37) {
                                X_point_est = "mean",
                                posterior_samples = 500,
                                repeat_only = 0,
-                                   verbose = 0,
+                                   verbose = 1,
                                    l1 = 8,
                                    l2 = 15,
-                                   l3 = 0.00003,
+                                   l3 = 30,
                                    l4 = 30,
                                    l5 = 2,
                                    l6 = 10)
-      
-      # l3 = 0.00005 worked for 7 
       
       # Extract all the samples and correlate concentrations and intake with proposal ids
       result <- rstan::extract(intake_model)
@@ -521,13 +536,24 @@ for (graph_person_id in 1:37) {
       intake_proposals.df$preference <- result$preference_lpdf
       intake_proposals.df$boundsum <- result$softbound_sum
       
+      contributions.df <- data.frame()
+
       # Add expected values of concentrations
       for (node_index in 1:nrow(assumedtargets)) {
         node_name <- assumedtargets[node_index,]$Name
         conc_mu_distribution <- result$Y_mu[,node_index]
         intake_proposals.df <- cbind(intake_proposals.df, conc_mu_distribution)
+
+        # Extract and store contributions of nutrients on concentrations
+        temp.df <- data.frame(queried_nodes)
+        temp.df$concentration <- node_name
+        temp.df$contributions <- colMeans(result$Q_contributions[,node_index,])
+        temp.df <- rbind(temp.df, c("base", node_name, head(result$Y_mu_Q0[,node_index],1)))
+        contributions.df <- rbind(contributions.df, temp.df)
       }
       
+      saveRDS(contributions.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/contributions_",graph_person_id,".rds"))
+ 
       # Add related intake proposals
       for (node_index in 1:length(queried_nodes)) {
         node_name <- queried_nodes[[node_index]]
@@ -886,234 +912,9 @@ dialysis_with_failed_concs <- subjects_with_failed_concs[1:8,]
 dialysis_lp_plots(dialysis_with_failed_concs$subject_code, "figures/dialysis_fixed_concentrations.pdf")
 
 ```
-
-
-
-
-
-
-
-
-
-```{r dialysis_lp_plots, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=10, fig.keep='last'}
-library(ggplot2)
-library(gridExtra)
-
-concinfo.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
-
-persons <- 7
-
-simulation <- "X50_B50_A50_I50"
-conc_plots <- vector('list', persons)
-
-pk_scale_min <- min(3.4, concinfo.df$current_pk[1:persons])-0.1
-pk_scale_max <- max(4.7, concinfo.df$current_pk[1:persons])+0.1
-fppi_scale_min <- min(0.9, concinfo.df$current_fppi[1:persons])-0.1
-fppi_scale_max <- max(1.78, concinfo.df$current_fppi[1:persons])+0.1
-palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
-palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
-
-point_size <- 0.5
-
-for (i in 1:(persons-1)) {
-  
-    accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",i,".rds"))
-
-    # Get personal normal ranges 
-  
-    subject_code <- levels(dialysis$potilas)[i]
-    personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-    recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
-
-    pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-    fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-    palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
-    
-    # Get current personal info and predictions
-  
-    curr_pk <- concinfo.df[concinfo.df$person_id == i,]$current_pk
-    curr_fppi <- concinfo.df[concinfo.df$person_id == i,]$current_fppi
-    curr_palb <- concinfo.df[concinfo.df$person_id == i,]$current_palb
-
-    pred_pk <- concinfo.df[concinfo.df$person_id == i,]$pk
-    pred_fppi <- concinfo.df[concinfo.df$person_id == i,]$fppi
-    pred_palb <- concinfo.df[concinfo.df$person_id == i,]$palb
-    
-    conc_plot1 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
-      geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
-      geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
-      scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-      theme_bw() +
-      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-      labs(x = element_blank(), y = i)
-
-    conc_plot2 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
-      geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
-      geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
-      scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-      theme_bw() +
-      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-      labs(x = element_blank(), y = element_blank())
-    
-    conc_plot3 <- ggplot(accepted_intake.df) +
-      geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
-      geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
-      geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
-      geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
-      scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
-      scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-      theme_bw() +
-      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-      labs(x = element_blank(), y = element_blank())
-    
-    conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
-    
-    conc_plots[[i]] <- conc_plot
-}
-
-i <- i + 1
-
-accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",i,".rds"))
-
-# Get personal normal ranges 
-
-subject_code <- levels(dialysis$potilas)[i]
-personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
-recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
-
-pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
-fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
-palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
-    
-conc_plot1 <- ggplot(accepted_intake.df) +
-  geom_point(aes(y=lp, x=pk_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
-  geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
-  geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
-  scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) + 
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-  theme_bw() +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-  labs(x = "P-K (mmol/l)", y = i)
-
-conc_plot2 <- ggplot(accepted_intake.df) +
-  geom_point(aes(y=lp, x=fppi_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
-  geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
-  geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
-  scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-  theme_bw() +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-  labs(x = "fP-Pi (mmol/l)", y = element_blank())
-
-conc_plot3 <- ggplot(accepted_intake.df) +
-  geom_point(aes(y=lp, x=palb_mu, color=preference), size = point_size, show.legend = FALSE) +
-  geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
-  geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
-  geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
-  scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
-  scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
-  theme_bw() +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
-  labs(x = "P-Alb (mmol/l)", y = element_blank())
-
-conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0)
-
-conc_plots[[i]] <- conc_plot
-
-full_conc_plot <- grid.arrange(grobs = conc_plots, ncol=1, padding=0, heights=c(rep(1, persons-1),1.15))
-
-ggsave(paste0("figures/dialysis_concentrations.pdf"), plot = full_conc_plot)
-
-```
-
 # Intake recommendation
 
-```{r result_plot}
-# Visualize the main results
-library(dplyr)
-library(tibble)
-library(tidyr)
-library(kableExtra)
-
-intake.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
-
-recommendation <- colnames(intake.df)[4:(4+12)]
-
-cond_nutrients <- dialysis_predictors[dialysis_predictors$Condition >= 100,]
-table_colnames <- c("", cond_nutrients$ShortDescription)
-
-up_color <- "#C23B22"
-down_color <- "#00BFC4"
-down_color <- "#3A5874"
-keep_color <- "#000000"
-
-recommendation_table.df <- intake.df %>%
-                              # Recommendation cell coloring conditional on difference from current value
-                              mutate(across(.cols = all_of(recommendation),
-                                            .fns = ~case_when(
-                                               get(glue::glue("current_{cur_column()}")) < .x ~ up_color,
-                                               get(glue::glue("current_{cur_column()}")) > .x ~ down_color,
-                                               get(glue::glue("current_{cur_column()}")) == .x ~ keep_color,
-                                            ),
-                                            .names = "{.col}_color")) %>%
-                              # Cell bolding conditional on amount of the difference (30%)
-                              mutate(across(.cols = all_of(recommendation),
-                                            .fns = ~case_when(
-                                               abs((get(glue::glue("current_{cur_column()}")) - .x) / .x * 100) > 30 ~ TRUE,
-                                               abs((get(glue::glue("current_{cur_column()}")) - .x) / .x * 100) < 30 ~ FALSE,
-                                            ),
-                                            .names = "{.col}_bold")) %>%
-                              # Round, format and paste as multiline-string with CI
-                              mutate(across(.cols = all_of(recommendation),
-                                            .fns = ~linebreak(paste0(
-                                              format(round(.x, cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
-                                              "\n${^{\\left[",
-                                              format(round(get(glue::glue("{cur_column()}_lCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals),
-                                              "; ", 
-                                              format(round(get(glue::glue("{cur_column()}_uCI")), cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                                     nsmall = cond_nutrients[cond_nutrients$Name == {cur_column()},]$Decimals), 
-                                              "\\right]}}$"), 
-                                              align="c"),
-                                            .names = "{.col}")) %>%
-                              select(c("subject_code", recommendation, paste0(recommendation,"_color"), paste0(recommendation,"_bold")))
-
-# Render PDF table and keep .tex
-
-kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T, row.names = FALSE, align = c("r", rep("c",13)), 
-   col.names = table_colnames,
-   caption = "Personally recommended intake (RI) for renal patients with lower and upper limits of recommendations.") %>%
-    kable_styling(latex_options="scale_down") %>%  
-    kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-   row_spec(0,bold=TRUE) %>%
-   column_spec(1, color = "#000000") %>%
-   column_spec(2, color = recommendation_table.df[,15], bold = recommendation_table.df[,28], underline = recommendation_table.df[,15] == up_color) %>%
-   column_spec(3, color = recommendation_table.df[,16], bold = recommendation_table.df[,29], underline = recommendation_table.df[,16] == up_color) %>%
-   column_spec(4, color = recommendation_table.df[,17], bold = recommendation_table.df[,30], underline = recommendation_table.df[,17] == up_color) %>%
-   column_spec(5, color = recommendation_table.df[,18], bold = recommendation_table.df[,31], underline = recommendation_table.df[,18] == up_color) %>%
-   column_spec(6, color = recommendation_table.df[,19], bold = recommendation_table.df[,32], underline = recommendation_table.df[,19] == up_color) %>%
-   column_spec(7, color = recommendation_table.df[,20], bold = recommendation_table.df[,33], underline = recommendation_table.df[,20] == up_color) %>%
-   column_spec(8, color = recommendation_table.df[,21], bold = recommendation_table.df[,34], underline = recommendation_table.df[,21] == up_color) %>%
-   column_spec(9, color = recommendation_table.df[,22], bold = recommendation_table.df[,35], underline = recommendation_table.df[,22] == up_color) %>%
-   column_spec(10, color = recommendation_table.df[,23], bold = recommendation_table.df[,36], underline = recommendation_table.df[,23] == up_color) %>%
-   column_spec(11, color = recommendation_table.df[,24], bold = recommendation_table.df[,37], underline = recommendation_table.df[,24] == up_color) %>%
-   column_spec(12, color = recommendation_table.df[,25], bold = recommendation_table.df[,38], underline = recommendation_table.df[,25] == up_color) %>%
-   column_spec(13, color = recommendation_table.df[,26], bold = recommendation_table.df[,39], underline = recommendation_table.df[,26] == up_color) %>%
-   column_spec(14, color = recommendation_table.df[,27], bold = recommendation_table.df[,40], underline = recommendation_table.df[,27] == up_color) %>%
-   save_kable(file = "tables/recommendations_dialysis.pdf", keep_tex = TRUE)
-
-```
-
-```{r result_plot2}
+```{r diet_recommendations_with_change}
 # Visualize the main results
 library(dplyr)
 library(tibble)
@@ -1193,6 +994,107 @@ kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T,
    save_kable(file = "tables/recommendations_dialysis_change.pdf", keep_tex = TRUE)
 
 ```
+```{r diet_strategies_plot, fig.width=7}
+library(dplyr)
+
+all_contributions.df <- data.frame()
+
+for (person_id in 1:37)
+{
+  contr_file <- paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/contributions_",person_id,".rds")
+  
+  if (file.exists(contr_file)) {
+    contributions.df <- readRDS(contr_file)
+    all_contributions.df <- rbind(all_contributions.df, cbind(person_id, contributions.df))
+  }
+}
+
+colnames(all_contributions.df) <- c("person_id", "nutrient", "concentration", "contributions")
+
+# Calculate mean contributions of nutrients for sorting them
+# ! TODO: Make this mean over all concentrations
+
+mean_contributions <- all_contributions.df %>%
+  filter(concentration == 'pk') %>%
+  filter(nutrient != 'base') %>%
+  group_by(concentration, nutrient) %>%
+  summarise(mean_abs_contribution = mean(abs(as.numeric(contributions)), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(nutrient, mean_abs_contribution)
+
+mean_contributions <- mean_contributions %>%  left_join(dialysis_predictors, by = join_by(nutrient == Name)) 
+
+# Join the mean_abs_contribution column to main data frame for sorting
+df <- all_contributions.df %>%
+#  filter(concentration == 'fpgluk') %>%
+#  filter(person_id %in% c(1,3)) %>%
+  left_join(mean_contributions, by = "nutrient") 
+
+# Baselevel of concentration is always sorted first
+df[df$nutrient == "base",]$mean_abs_contribution <- 100
+
+# Calculate the cumulative concentrations 
+cumulative_concs <- df %>% 
+     group_by(person_id, concentration) %>%
+     arrange(desc(abs(mean_abs_contribution))) %>%
+     mutate(predicted_concentration = cumsum(contributions)) %>%
+     arrange((abs(mean_abs_contribution))) %>%
+     mutate(nutrient=factor(nutrient, levels=nutrient)) %>%
+     mutate(person_id=factor(person_id))
+
+
+# Add subject codes for plotting and personal limits
+limit_data <- data.frame()
+
+for (person_id in as.numeric(levels(cumulative_concs$person_id)))
+{
+    subject_code <- levels(dialysis$potilas)[person_id]
+    treatment <- unique(dialysis[dialysis$potilas == subject_code,]$hoitomuoto)
+  
+    # Normal ranges of concentration are personalized
+    personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+    recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
+  
+    l.df <- data.frame(concentration = dialysis_targets$Name, lower_limits = as.vector(recommeded_concentrations$lower_limits), upper_limits = as.vector(recommeded_concentrations$upper_limits))
+  
+  limit_data <- rbind(limit_data, l.df)
+}
+
+limit_data <- unique(limit_data)
+
+# Include personal diet clustering
+#diet_clusters$person_id <- factor(diet_clusters$person_id)
+#diet_clusters$diet_cluster <- factor(diet_clusters$diet_cluster)
+
+#cumulative_concs <- cumulative_concs %>% left_join(diet_clusters, join_by(person_id))
+
+# annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
+# annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
+
+nutrient_labels <- setNames(cumulative_concs$ShortDescription, cumulative_concs$nutrient)
+nutrient_labels <- paste0("+ ", nutrient_labels[!duplicated(names(nutrient_labels))])
+nutrient_labels[14] <- "Baseline"
+
+conc_labels <- c(pk = "P-K (mmol/l)", fppi = "fP-Pi (mmol/l)", palb = "P-Alb (mmol/l)")
+
+#library("viridis")
+
+p <- ggplot(cumulative_concs) +
+   geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = TRUE) +
+   geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = person_id), linewidth=0.3, show.legend = FALSE) +
+   geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
+   geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
+   facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+   scale_y_discrete(labels = nutrient_labels) + 
+   theme_bw() +
+   labs(x = element_blank(), y = element_blank(), color="Subject") 
+ p
+
+ggsave("figures/dialysis_diet_strategies.pdf", plot = p)
+  
+```
+
+# TRASHCAN
 
 
 ```{r recommendation_analysis}

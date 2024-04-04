@@ -348,10 +348,6 @@ queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 lowerbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Lowerbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 upperbounds <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Upperbound) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
-# testitesti
-#lowerbounds["epa"] = lowerbounds["dha"]
-#upperbounds["epa"] = upperbounds["dha"]
-
 # generally recommended intake (RI)
 RI <- sapply(queried_nodes, function(x) (as.numeric(datadesc[datadesc$Name==x,]$Recommendation) - org_stats[org_stats$name == x,]$mean) / org_stats[org_stats$name == x,]$sd)
 
@@ -366,18 +362,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-#for (person_id in 1:length(kontrolli)) {
-for (person_id in 29:29) {
+for (person_id in 1:length(kontrolli)) {
+#for (person_id in 9:9) {
   
-#failed:
-#[1] "Simulating patient id 26"
-#[1] "Simulating subject_code S12"
-
-#[1] "Simulating patient id 28"
-#[1] "Simulating subject_code S121"
-  
-# try lower l3  
-
   subject_code <- kontrolli[person_id]
 
   # Normal ranges of concentration are personalized
@@ -389,13 +376,28 @@ for (person_id in 29:29) {
 
   if (check_failed_concs(graph_person_id, personal_info, recommeded_concentrations) == TRUE) { 
   
-      print(paste0("Simulating patient id ", graph_person_id))
+      print(paste0("Simulating person_id ", person_id))
+      print(paste0("Simulating graph_person_id ", graph_person_id))
       print(paste0("Simulating subject_code ", subject_code))
     
       personal_model_dir <- paste0(graph_dir,graph_person_id)
       personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
       
       # Sample diet proposals and matching concentration predictions
+      
+      l3 <- 40
+      l5 <- 2
+      
+      # - more loose preference for special cases
+      if (graph_person_id == 12 || graph_person_id == 84)
+      {
+        l3 <- 35
+        l5 <- 1.5
+      } else if (graph_person_id == 26 || graph_person_id == 28)
+      {
+        l3 <- 30
+        l5 <- 1.1
+      }
     
       intake_model <- mebn.Query(reaction_graph = personal_graph,
                                graph_dir = personal_model_dir,
@@ -415,9 +417,9 @@ for (person_id in 29:29) {
                                verbose = 1,
                                l1 = 8,
                                l2 = 15,
-                               l3 = 35,
+                               l3 = l3,
                                l4 = 30,
-                               l5 = 1.5,
+                               l5 = l5,
                                l6 = 10)
 
         #params <- readRDS("last_params.rds")
@@ -516,7 +518,7 @@ for (person_id in 29:29) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lowerbound"), paste0(assumedtargets$Name, "_upperbound"))
 
-#saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
 
@@ -581,8 +583,6 @@ lay <- rbind(c(1),
 lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 
 ```
-
-
 ```{r current_levels}
 # Add current levels of intake and concentrations to the data frame
 library(stringr)
@@ -592,8 +592,8 @@ datadesc <- sysdimet_datadesc
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 
 # clustering
-feature_index <- c(1:nrow(assumedpredictors))
-personal_effects <- matrix(NA, ncol=length(feature_index)*nrow(assumedtargets), nrow=length(levels(sysdimet$SUBJECT_ID)))
+feature_index <- c(1:nrow(sysdimet_predictors))
+personal_effects <- matrix(NA, ncol=length(feature_index)*nrow(sysdimet_targets), nrow=length(levels(sysdimet$SUBJECT_ID)))
 
 personal_effects <- data.frame()
 
@@ -631,7 +631,7 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
     current_intake <- c(current_intake, current_intake_level)
     
     # collect personal effects for clustering
-    for (t in assumedtargets$Name)
+    for (t in sysdimet_targets$Name)
     {
       eff_name <- paste0("personal_",queried_nodes[i],"_",t)
       b <- V(personal_graph)[eff_name]$value
@@ -679,40 +679,6 @@ recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendat
 
 saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
 ```
-
-
-```{r}
-personal_effects
-
-#recommendation_with_concpreds.df$subject_code
-
-k.max <- 8
-set.seed(fixed_seed)
-wss_effects <- sapply(1:k.max, function(k){kmeans(personal_effects, k, nstart=50, iter.max = 15)$tot.withinss})
-
-df_effects <- data.frame(x = 1:k.max, y = wss_effects)
-
-plot1 <- ggplot(data=df_effects, aes(x=x, y=y, group=1)) +
-  geom_line() +
-  geom_point() + 
-  ggtitle("Difference in absolute reaction") +
-  xlab("Number of clusters") +
-  ylab("Difference between clusters")
-
-plot1
-
-# Number of cluster centers 
-k <- 4
-
-# Clustering using k-means
-set.seed(fixed_seed)
-km <- kmeans(personal_effects, centers = k)
-
-recommendation_with_concpreds.df$effect_cluster <- km$cluster
-
-personal_effect_clusters <- recommendation_with_concpreds.df %>% select(person_id, subject_code, effect_cluster)
-```
-
 
 #sysdimet_lp_plots
 ```{r sysdimet_lp_plots-function}
@@ -1105,6 +1071,134 @@ kable(fixed_concs.df[1:16], format = "latex", escape = F, booktabs = T, row.name
 
 ```
 
+```{r personal_effects_clustering}
+
+k.max <- 8
+set.seed(fixed_seed)
+wss_effects <- sapply(1:k.max, function(k){kmeans(personal_effects, k, nstart=50, iter.max = 15)$tot.withinss})
+
+df_effects <- data.frame(x = 1:k.max, y = wss_effects)
+
+plot1 <- ggplot(data=df_effects, aes(x=x, y=y, group=1)) +
+  geom_line() +
+  geom_point() + 
+  ggtitle("Difference in absolute reaction") +
+  xlab("Number of clusters") +
+  ylab("Difference between clusters")
+
+plot1
+
+# Number of cluster centers 
+k <- 4
+
+# Clustering using k-means
+set.seed(fixed_seed)
+km <- kmeans(personal_effects, centers = k)
+
+recommendation_with_concpreds.df$effect_cluster <- km$cluster
+
+personal_effect_clusters <- recommendation_with_concpreds.df %>% select(person_id, subject_code, effect_cluster)
+```
+
+
+```{r concentration_compositions_clustering}
+
+k.max <- 8
+set.seed(fixed_seed)
+wss_effects <- sapply(1:k.max, function(k){kmeans(personal_effects, k, nstart=50, iter.max = 15)$tot.withinss})
+
+df_effects <- data.frame(x = 1:k.max, y = wss_effects)
+
+plot1 <- ggplot(data=df_effects, aes(x=x, y=y, group=1)) +
+  geom_line() +
+  geom_point() + 
+  ggtitle("Difference in absolute reaction") +
+  xlab("Number of clusters") +
+  ylab("Difference between clusters")
+
+plot1
+
+# Number of cluster centers 
+k <- 4
+
+# Clustering using k-means
+set.seed(fixed_seed)
+km <- kmeans(personal_effects, centers = k)
+
+recommendation_with_concpreds.df$effect_cluster <- km$cluster
+
+personal_effect_clusters <- recommendation_with_concpreds.df %>% select(person_id, subject_code, effect_cluster)
+
+recommendation_with_concpreds.df
+personal_effects
+
+```
+
+
+```{r contribution_clustering}
+library(tidyr)
+library(ggplot2)
+
+all_contributions.df <- data.frame()
+
+for (person_id in 1:90)
+{
+  contr_file <- paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/contributions_",person_id,".rds")
+  
+  if (file.exists(contr_file)) {
+    contributions.df <- readRDS(contr_file)
+    all_contributions.df <- rbind(all_contributions.df, cbind(person_id, contributions.df))
+  }
+}
+
+colnames(all_contributions.df) <- c("person_id", "nutrient", "concentration", "contributions")
+
+# Step 1: Create a new column that combines nutrient and concentration into a single string
+# This will serve as the new column names after pivoting
+all_contributions.df <- all_contributions.df %>%
+  filter(concentration == "fsins") %>%
+  mutate(nutrient_concentration = paste(nutrient, concentration, sep = "_")) %>%
+  select(-nutrient, -concentration)
+
+# Step 2: Use pivot_wider() to spread the nutrient_concentration pairs across the columns,
+# filling with contributions values
+wide_contributions.df <- all_contributions.df %>%
+  group_by(person_id) %>%
+  pivot_wider(names_from = nutrient_concentration, values_from = contributions) %>%
+  ungroup()
+
+# Print the transformed data frame
+#print(wide_contributions.df)
+
+k.max <- 8
+set.seed(fixed_seed)
+wss_contributions <- sapply(1:k.max, function(k){kmeans(wide_contributions.df, k, nstart=50, iter.max = 15)$tot.withinss})
+
+df_contributions <- data.frame(x = 1:k.max, y = wss_contributions)
+
+plot1 <- ggplot(data=df_contributions, aes(x=x, y=y, group=1)) +
+  geom_line() +
+  geom_point() + 
+  ggtitle("Difference in concentration contributions") +
+  xlab("Number of clusters") +
+  ylab("Difference between clusters")
+
+plot1
+
+# Number of cluster centers 
+k <- 2
+
+# Clustering using k-means
+set.seed(fixed_seed)
+km <- kmeans(wide_contributions.df, centers = k)
+
+recommendation_with_concpreds.df$diet_cluster <- km$cluster
+
+diet_clusters <- recommendation_with_concpreds.df %>% select(person_id, subject_code, diet_cluster)
+
+```
+
+
 ```{r diet_strategies_plot, fig.width=7}
 library(dplyr)
 
@@ -1133,7 +1227,7 @@ mean_contributions <- all_contributions.df %>%
   ungroup() %>%
   select(nutrient, mean_abs_contribution)
 
-mean_contributions <- mean_contributions %>%  left_join(assumedpredictors, by = join_by(nutrient == Name)) 
+mean_contributions <- mean_contributions %>%  left_join(sysdimet_predictors, by = join_by(nutrient == Name)) 
 
 # Join the mean_abs_contribution column to main data frame for sorting
 df <- all_contributions.df %>%
@@ -1146,24 +1240,47 @@ df[df$nutrient == "base",]$mean_abs_contribution <- 100
 
 # Calculate the cumulative concentrations 
 cumulative_concs <- df %>% 
-    group_by(person_id, concentration) %>%
-    arrange(desc(abs(mean_abs_contribution))) %>%
-    mutate(predicted_concentration = cumsum(contributions),.groups=person_id) %>%
-    arrange((abs(mean_abs_contribution))) %>%
-    mutate(nutrient=factor(nutrient, levels=nutrient)) %>%
-    mutate(person_id=factor(person_id))
+     group_by(person_id, concentration) %>%
+     arrange(desc(abs(mean_abs_contribution))) %>%
+     mutate(predicted_concentration = cumsum(contributions)) %>%
+     arrange((abs(mean_abs_contribution))) %>%
+     mutate(nutrient=factor(nutrient, levels=nutrient)) %>%
+     mutate(person_id=factor(person_id))
 
-limit_data <- data.frame(
-  concentration = assumedtargets$Name,
-  lower_limits = as.vector(recommeded_concentrations$lower_limits),
-  upper_limits = as.vector(recommeded_concentrations$upper_limits)
-)
 
-# Include personal effect clustering
-personal_effect_clusters$person_id <- factor(personal_effect_clusters$person_id)
-personal_effect_clusters$effect_cluster <- factor(personal_effect_clusters$effect_cluster)
+# Add subject codes for plotting and personal limits
+subject_codes <- data.frame()
+limit_data <- data.frame()
+subjects <- levels(sysdimet$SUBJECT_ID)
 
-cumulative_concs <- cumulative_concs %>% left_join(personal_effect_clusters, join_by(person_id))
+for (person_id in as.numeric(levels(cumulative_concs$person_id)))
+{
+  subject_code <- subjects[person_id]
+  subject_id <- as.numeric(gsub("S","",subject_code))
+  
+  subject_codes <- rbind(subject_codes, c(person_id, subject_id, subject_code))  
+  
+  # Normal ranges of concentration are personalized
+  personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
+
+  l.df <- data.frame(concentration = sysdimet_targets$Name, lower_limits = as.vector(recommeded_concentrations$lower_limits), upper_limits = as.vector(recommeded_concentrations$upper_limits))
+  
+  limit_data <- rbind(limit_data, l.df)
+}
+
+limit_data <- unique(limit_data)
+colnames(subject_codes) <- c("person_id", "subject_id", "subject_code")
+
+cumulative_concs <- cumulative_concs %>% left_join(subject_codes, join_by(person_id))
+cumulative_concs$subject_code <- factor(cumulative_concs$subject_code)
+cumulative_concs$subject_id <- factor(cumulative_concs$subject_id)
+
+# Include personal diet clustering
+#diet_clusters$person_id <- factor(diet_clusters$person_id)
+#diet_clusters$diet_cluster <- factor(diet_clusters$diet_cluster)
+
+#cumulative_concs <- cumulative_concs %>% left_join(diet_clusters, join_by(person_id))
 
 # annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
 # annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
@@ -1174,32 +1291,42 @@ nutrient_labels[16] <- "Baseline"
 
 conc_labels <- c(fshdl = "fS-HDL (mmol/l)", fsldl = "fS-LDL (mmol/l)", fsins = "fS-Ins (mmol/l)", fskol = "fS-Chol (mmol/l)", fpgluk = "fP-Gluc (mmol/l)")
 
-library("viridis")
+#library("viridis")
 
 p <- ggplot(cumulative_concs) +
-  geom_point(aes(x = predicted_concentration, y = nutrient, color = effect_cluster), size = 1.0, show.legend = TRUE) +
-  geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = effect_cluster), linewidth=0.3, show.legend = FALSE) +
-  geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "black") +
-  geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "black") +
-  facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
-  scale_y_discrete(labels = nutrient_labels) + 
-  theme_bw() +
-  labs(x = element_blank(), y = element_blank()) +
-  scale_color_viridis(discrete = TRUE, option = "D")+
-  scale_fill_viridis(discrete = TRUE) 
-p
+   geom_point(aes(x = predicted_concentration, y = nutrient, color = subject_id), size = 0.7, show.legend = TRUE) +
+   geom_path(aes(x = predicted_concentration, y = nutrient, group = subject_id, color = subject_id), linewidth=0.3, show.legend = FALSE) +
+   geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#CCCCCC") +
+   geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#CCCCCC") +
+   facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+   scale_y_discrete(labels = nutrient_labels) + 
+   theme_bw() +
+   labs(x = element_blank(), y = element_blank(), color="Subject") 
+ p
+
+# highlight <- c(15, 17)
+# 
+# colors <- setNames(rep("lightgray", length(unique(cumulative_concs$person_id))), unique(cumulative_concs$person_id))
+# colors[as.character(highlight)] <- "red"
+# 
+# p <- ggplot(cumulative_concs) +
+#   geom_point(aes(x = predicted_concentration, y = nutrient, color = factor(person_id)), size = 1.0, show.legend = TRUE) +
+#   geom_path(aes(x = predicted_concentration, y = nutrient, group = factor(person_id), color = factor(person_id)), linewidth=0.3, show.legend = FALSE) +
+#   geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "black") +
+#   geom_vline(data = limit_data2, aes(xintercept = upper_limits), linetype = "dashed", color = "black") +
+#   geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "black") +
+#   facet_wrap(~concentration, scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+#   scale_y_discrete(labels = nutrient_labels) +
+#   theme_bw() +
+#   labs(x = element_blank(), y = element_blank()) +
+#   scale_color_manual(values = colors) # Apply the manual color scale
+# p  
+
+  #scale_color_viridis(discrete = TRUE, option = "D")+
+  #scale_fill_viridis(discrete = TRUE) 
 
 ggsave("figures/sysdimet_diet_strategies.pdf", plot = p)
   
-#ggplot(all_contributions.df) +
- # geom_path(aes(x=contributions, y=queried_nodes, color=contributions < 0), size = 0.7, show.legend = FALSE) 
-  #geom_vline(xintercept=0, linetype="solid", color = "black", linewidth=0.3) +
-  #facet_wrap(~concentration) +
-  #theme_bw() +
-  #labs(x = element_blank(), y = element_blank()) +
-  #theme(axis.text.x = element_blank())
- 
-
 ```
 
 
