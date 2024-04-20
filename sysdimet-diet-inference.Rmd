@@ -249,6 +249,87 @@ for (person_id in 1:length(patients)) {
 
 ```
 
+```{r build_effect_summary, echo=FALSE, eval=FALSE}
+
+library(igraph)
+graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
+
+# - collect personal statistics in this data frame
+effect_summary <- data.frame(matrix(ncol = 17, nrow = 0), row.names = NULL)
+
+kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
+patients <- levels(kontrolli$SUBJECT_ID)
+
+  subject_code <- kontrolli[person_id]
+  
+    graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
+
+  graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",graph_person_id)
+  personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
+
+for (person_id in 1:length(patients)) {
+  
+  personal_model_dir <- paste0(graph_dir,person_id)
+  personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
+  
+  subject_code <- levels(dialysis$potilas)[person_id]
+
+  for (c in 1:dim(sysdimet_targets)[1])
+  {
+    target_column <- sysdimet_targets[c,]
+    target_name <- as.vector(target_column$Name)
+    
+    predictor_names <- as.vector(sysdimet_predictors$Name)
+    
+    for (p in 1:dim(sysdimet_predictors)[1])
+    {
+      predictor_name <- predictor_names[p]
+    
+      effect_name <- paste0(predictor_name,"_",target_name)
+        
+      nodes <- V(personal_graph)
+  
+      effect_summary <- data.frame(matrix(ncol = 17, nrow = 0), row.names = NULL)
+      
+      personal_effects <- c(person_id,
+                            effect_name,
+                            nodes[paste0(effect_name)]$value,
+                            nodes[paste0(effect_name)]$mode,
+                            nodes[paste0(effect_name)]$value_lCI,
+                            nodes[paste0(effect_name)]$value_uCI,
+                            nodes[paste0("sigma_g_", effect_name)]$value,
+                            nodes[paste0("sigma_g_", effect_name)]$value_lCI,
+                            nodes[paste0("sigma_g_", effect_name)]$value_uCI,
+                            nodes[paste0("sigma_b_", effect_name)]$value,
+                            nodes[paste0("sigma_b_", effect_name)]$value_lCI,
+                            nodes[paste0("sigma_b_", effect_name)]$value_uCI,
+                            treatment,
+                            nodes[paste0("personal_", effect_name)]$group,
+                            nodes[paste0("personal_", effect_name)]$group_mode,
+                            nodes[paste0("personal_", effect_name)]$group_lCI,
+                            nodes[paste0("personal_", effect_name)]$group_uCI,
+                            nodes[paste0("personal_", effect_name)]$value,
+                            nodes[paste0("personal_", effect_name)]$mode,
+                            nodes[paste0("personal_", effect_name)]$value_lCI,
+                            nodes[paste0("personal_", effect_name)]$value_uCI)
+  
+  
+      effect_summary <- rbind(effect_summary,personal_effects)
+    }
+  }
+
+}
+
+colnames(effect_summary) <- c("person_id", "effect", "general_effect", "general_effect_mode", "general_effect_lCI", "general_effect_uCI", "sigma_g", "sigma_g_lCI", "sigma_g_uCI", "sigma_b", "sigma_b_lCI", "sigma_b_uCI", "treatment_group", "group_effect", "group_effect_mode", "group_effect_lCI", "group_effect_uCI", "personal_effect", "personal_effect_mode","personal_effect_lCI","personal_effect_uCI")
+
+saveRDS(effect_summary, "patient_summary/two_level_effect_summary.rds")
+
+```
+
+
+
+
+
 ```{r check_failed_concs}
 library(igraph)
 
@@ -315,8 +396,6 @@ for (person_id in 1:length(kontrolli)) {
 
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
-
-# https://khakieconomics.github.io/2016/10/17/An-introduction-to-finite-mixtures.html
 
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
@@ -583,24 +662,63 @@ lay <- rbind(c(1),
 lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, conc_plot4, conc_plot5, layout_matrix = lay, padding=0)
 
 ```
-```{r current_levels}
+```{r}
+      effect_name <- paste0(predictor_name,"_",target_name)
+        
+      nodes <- V(personal_graph)
+  
+      effect_summary <- data.frame(matrix(ncol = 17, nrow = 0), row.names = NULL)
+      
+      personal_effects <- c(person_id,
+                            effect_name,
+                            nodes[paste0(effect_name)]$value,
+                            nodes[paste0(effect_name)]$mode,
+                            nodes[paste0(effect_name)]$value_lCI,
+                            nodes[paste0(effect_name)]$value_uCI,
+                            nodes[paste0("sigma_g_", effect_name)]$value,
+                            nodes[paste0("sigma_g_", effect_name)]$value_lCI,
+                            nodes[paste0("sigma_g_", effect_name)]$value_uCI,
+                            nodes[paste0("sigma_b_", effect_name)]$value,
+                            nodes[paste0("sigma_b_", effect_name)]$value_lCI,
+                            nodes[paste0("sigma_b_", effect_name)]$value_uCI,
+                            treatment,
+                            nodes[paste0("personal_", effect_name)]$group,
+                            nodes[paste0("personal_", effect_name)]$group_mode,
+                            nodes[paste0("personal_", effect_name)]$group_lCI,
+                            nodes[paste0("personal_", effect_name)]$group_uCI,
+                            nodes[paste0("personal_", effect_name)]$value,
+                            nodes[paste0("personal_", effect_name)]$mode,
+                            nodes[paste0("personal_", effect_name)]$value_lCI,
+                            nodes[paste0("personal_", effect_name)]$value_uCI)
+  
+  
+      effect_summary <- rbind(effect_summary,personal_effects)
+    }
+  }
+
+}
+
+colnames(effect_summary) <- c("person_id", "effect", "general_effect", "general_effect_mode", "general_effect_lCI", "general_effect_uCI", "sigma_g", "sigma_g_lCI", "sigma_g_uCI", "sigma_b", "sigma_b_lCI", "sigma_b_uCI", "treatment_group", "group_effect", "group_effect_mode", "group_effect_lCI", "group_effect_uCI", "personal_effect", "personal_effect_mode","personal_effect_lCI","personal_effect_uCI")
+
+saveRDS(effect_summary, "patient_summary/two_level_effect_summary.rds")
+
+```
+
+
+```{r current_levels_and_effect_summary}
 # Add current levels of intake and concentrations to the data frame
 library(stringr)
+library(igraph)
 
 datadesc <- sysdimet_datadesc
-
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
-
-# clustering
-feature_index <- c(1:nrow(sysdimet_predictors))
-personal_effects <- matrix(NA, ncol=length(feature_index)*nrow(sysdimet_targets), nrow=length(levels(sysdimet$SUBJECT_ID)))
-
-personal_effects <- data.frame()
 
 # - current levels are joined with this summary
 recommendation_with_concpreds.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary.rds")
 
 current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(sysdimet_targets), nrow = 0), row.names = NULL)
+
+personal_effects <- data.frame()
 
 for (subject_code in recommendation_with_concpreds.df$subject_code) {
   
@@ -611,7 +729,8 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
 
   graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",graph_person_id)
   personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
-  
+  nodes <- V(personal_graph)
+
   # Current intake levels
   
   current_intake <- c()
@@ -630,18 +749,21 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
   
     current_intake <- c(current_intake, current_intake_level)
     
-    # collect personal effects for clustering
+    # collect personal effects statistics
     for (t in sysdimet_targets$Name)
     {
-      eff_name <- paste0("personal_",queried_nodes[i],"_",t)
-      b <- V(personal_graph)[eff_name]$value
+      effect_name <- paste0(queried_nodes[i],"_",t)
       
-      effects <- c(effects, b)
-      effect_names <- c(effect_names, eff_name)
+      effects <-  c(graph_person_id,
+                    effect_name,
+                    nodes[paste0("personal_", effect_name)]$value,
+                    nodes[paste0("personal_", effect_name)]$value_lCI,
+                    nodes[paste0("personal_", effect_name)]$value_uCI)
+      
+      personal_effects <- rbind(personal_effects, effects)
     }
   }
   
-  personal_effects <- rbind(personal_effects, effects)
   
   # Current concentration levels
 
@@ -657,7 +779,7 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
   current_diet.df <- rbind(current_diet.df, c(as.character(graph_person_id), current_intake, current_concs))
 }
 
-colnames(personal_effects) <- effect_names
+colnames(personal_effects) <- c("graph_person_id", "effect", "value", "value_lCI", "value_uCI")
 
 colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", sysdimet_targets$Name))
 
@@ -678,7 +800,61 @@ recommendation_with_concpreds_and_current.df$subject_code <- gsub("S","",recomme
 recommendation_with_concpreds_and_current.df <- as.data.frame(sapply(recommendation_with_concpreds_and_current.df, as.numeric))
 
 saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds"))
+
 ```
+
+```{r}
+library(kableExtra) # for HTML and Latex tables
+
+# personal_effects is gathered in the previous block
+
+effect_summary <- personal_effects %>% 
+  group_by(effect) %>%
+  dplyr::summarise(
+                effect_avg = mean(as.numeric(value)),
+                effect_sd = sd(as.numeric(value)),                 
+                min_personal = min(as.numeric(value)),
+                min_personal_lCI = as.numeric(value_lCI[which.min(as.numeric(value))]),
+                min_personal_uCI = as.numeric(value_uCI[which.min(as.numeric(value))]),
+                max_personal = max(as.numeric(value)),
+                max_personal_lCI = as.numeric(value_lCI[which.max(as.numeric(value))]),
+                max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))])
+  ) %>%
+  arrange(desc(abs(effect_avg))) %>%
+  top_n(20)
+
+effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
+
+effect_summary_table.df$effect_avg <- linebreak(paste0(format(round(effect_summary$effect_avg,2), nsmall=2)))
+effect_summary_table.df$effect_sd <- linebreak(paste0(format(round(effect_summary$effect_sd,2), nsmall=2)))
+
+effect_summary_table.df$min_personal <- linebreak(paste0(format(round(effect_summary$min_personal,2), nsmall=2),"\n$\\left[",format(round(effect_summary$min_personal_lCI,2), nsmall=2),"; ",format(round(effect_summary$min_personal_uCI,2), nsmall=2),"\\right]$"), align = "c")
+
+effect_summary_table.df$max_personal <- linebreak(paste0(format(round(effect_summary$max_personal,2), nsmall=2),"\n$\\left[",format(round(effect_summary$max_personal_lCI,2), nsmall=2),"; ",format(round(effect_summary$max_personal_uCI,2), nsmall=2),"\\right]$"), align = "c")
+
+colnames(effect_summary_table.df) <- c("effect", "effect_avg", "effect_sd", "min_personal", "max_personal")
+
+# lookup dataframe for pretty effect names
+all_effects <- expand.grid(predictor = sysdimet_predictors$Name, target = sysdimet_targets$Name)
+all_descs <- expand.grid(predictor = sysdimet_predictors$ShortDescription, target = sysdimet_targets$ShortDescription)
+effect_desc.df <- data.frame(effect <- paste0(all_effects$predictor,"_",all_effects$target), row.names = NULL)
+effect_desc.df$desc <- paste0(effect <- paste0(all_descs$predictor," -> ",all_descs$target))
+effect_desc.df$nutrient <- all_descs$predictor
+effect_desc.df$concentration <- all_descs$target
+colnames(effect_desc.df) <- c("effect", "effect_description", "nutrient", "concentration")
+
+effect_summary_table.df <- effect_summary_table.df %>% left_join(effect_desc.df, by = "effect")
+
+kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lccccccccccc",
+  col.names = c("Effect", "Avg. effect", "Effect sd.", "Min. personal effect", "Max personal effect")) %>%
+  column_spec(1, width = "7em") %>%
+  kable_styling(latex_options="scale_down") %>%  
+  kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+  row_spec(0,bold=TRUE) %>%
+  save_kable(file = "tables/sysdimet_effects.pdf", keep_tex = TRUE)
+
+```
+
 
 #sysdimet_lp_plots
 ```{r sysdimet_lp_plots-function}
