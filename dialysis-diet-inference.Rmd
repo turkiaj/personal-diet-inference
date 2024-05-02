@@ -286,13 +286,13 @@ sumstats[startsWith(sumstats$summary, "personal_effect"),]
 startsWith(sumstats$summary[1,], "personal_effect")
 
 pe_summary1 <- summary(target_blmm1, pars="personal_effect")
-pe_summary <- summary(target_blmm, pars="g_alpha")
+pe_summary <- summary(target_blmm, pars="personal_effect")
 
 eff1 <- na.omit(pe_summary1$summary[,9])
 c(min(eff1),mean(eff1),max(eff1))
 
-rhat1 <- na.omit(pe_summary1$summary[,10])
-c(min(rhat1),mean(rhat1),max(rhat1))
+rhat_pe <- na.omit(pe_summary$summary[,10])
+c(min(rhat_pe),mean(rhat_pe),max(rhat_pe))
 
 eff <- na.omit(pe_summary$summary[,9])
 c(min(eff),mean(eff),max(eff))
@@ -502,8 +502,16 @@ for (graph_person_id in 1:37) {
 
       # Sample diet proposals and matching concentration predictions
       
-      #source("mebn/v3/MEBNv3.r")
-    
+      l3 <- 30
+      l5 <- 2
+      
+      # - more loose preference for special cases
+      if (graph_person_id == 1)
+      {
+         l3 <- 1
+         l5 <- 1.0
+      } 
+
       intake_model <- mebn.Query(reaction_graph = personal_graph,
                                graph_dir = personal_model_dir,
                                queried_nodes = queried_nodes,
@@ -827,15 +835,7 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
   
   for (subject_code in subject_code_vector[1:(persons-1)]) {
     
-      graph_person_id <- concinfo.df[concinfo.df$subject_code == subject_code,]$person_id
       graph_person_id <- match(subject_code, levels(dialysis$potilas))
-      
-      graph_person_id
-
-      
-      dialysis[dialysis$potilas == subject_code,]
-
-      graph_person_id
       
       accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
       
@@ -1150,7 +1150,7 @@ conc_labels <- c(pk = "P-K (mmol/l)", fppi = "fP-Pi (mmol/l)", palb = "P-Alb (mm
 #library("viridis")
 
 p <- ggplot(cumulative_concs) +
-   geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = TRUE) +
+   geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = FALSE) +
    geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = person_id), linewidth=0.3, show.legend = FALSE) +
    geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
    geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
@@ -1163,6 +1163,71 @@ p <- ggplot(cumulative_concs) +
 ggsave("figures/dialysis_diet_strategies.pdf", plot = p)
   
 ```
+
+```{r diet_strategies_table}
+library(dplyr)
+library(tidyr)
+library(purrr)
+
+# Get unique concentrations
+concentrations <- unique(cumulative_concs$concentration)
+
+# Loop through each concentration and create summary statistics
+summary_dfs <- lapply(concentrations, function(conc) {
+  cumulative_concs %>%
+  ungroup() %>%
+    select(nutrient, concentration, contributions) %>%
+    filter(concentration == conc) %>%
+    filter(nutrient != "base") %>%
+    group_by(nutrient) %>%
+    summarise(
+      avg_contribution = round(mean(as.numeric(contributions)),2), 
+      min_contribution = round(min(as.numeric(contributions)),2),
+      max_contribution = round(max(as.numeric(contributions)),2)
+    ) %>%
+    arrange(desc(abs(avg_contribution))) %>%
+    select(nutrient, min_contribution, max_contribution) %>%
+    # Rename the columns to include the concentration name
+    rename_with(~ paste0(.x, "_", conc), -nutrient)
+})
+
+# unused additional summaries
+#minmax_contribution = paste0(round(min(as.numeric(contributions)),2), " - ", round(max(as.numeric(contributions)),2))
+#sd_contribution = round(sd(as.numeric(contributions)),2)
+
+
+# Merge the summary data frames into a single data frame
+strategy_summary.df <- reduce(summary_dfs, full_join, by = "nutrient")
+
+# Pretty nutrient names
+all_effects <- data.frame(nutrient = sysdimet_predictors$Name, effect = sysdimet_predictors$ShortDescription)
+strategy_summary.df <- strategy_summary.df %>% left_join(all_effects, by = "nutrient")
+strategy_summary.df$nutrient <- strategy_summary.df$effect
+strategy_summary.df <- subset(strategy_summary.df, select = -c(12))
+
+kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
+  col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
+  add_header_above(c(" " = 1, "P-K" = 2, "fP-Pi" = 2, "P-Alb" = 2), escape = F) %>%
+  column_spec(1, width = "7em") %>%
+  kable_styling(latex_options="scale_down") %>%  
+  kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+  row_spec(0,bold=TRUE) %>%
+  save_kable(file = "tables/dialysis_diet_strategies.pdf", keep_tex = TRUE)
+
+# kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lccc",
+#   col.names = c("Nutrient", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD")) %>%
+#   add_header_above(c(" " = 1, "Contribution to fS-HDL" = 3, "fS-LDL" = 3, "fS-Ins" = 3, "fS-Chol" = 3, "fp-Gluc" = 3), escape = F) %>%
+#   column_spec(1, width = "7em") %>%
+#   kable_styling(latex_options="scale_down") %>%  
+#   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
+#   row_spec(0,bold=TRUE) %>%
+#   save_kable(file = "tables/sysdimet_diet_strategies.pdf", keep_tex = TRUE)
+
+strategy_summary.df
+
+```
+
+
 
 # TRASHCAN
 
