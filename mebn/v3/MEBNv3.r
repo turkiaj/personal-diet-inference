@@ -3818,6 +3818,7 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   
   # low EPA-simulation
   #Q_beta_point[,14] <- Q_beta_point[,14] * 0.1
+  Q_beta_point[,14] <- 0
   
   if (X_point_est == "mean")
   {

@@ -65,7 +65,7 @@ transformed data {
   // Calculate personal maximum preference error by combining the current diet to lower and upper intake limits  
   real max_personal_preference_error = preference_error(current_Q, append_col(proposal_lowerlimits, proposal_upperlimits), Q_beta_point, r, responses, penalty_rate);
   
-  real lambda_k = -lambert_w0(-machine_precision()/max_personal_preference_error) / max_personal_preference_error;
+  real lambda_k = -lambert_w0(-machine_precision()*max_personal_preference_error) / max_personal_preference_error;
 
   real personal_preference_strength = lambda_k + pow(preference_strength, penalty_rate) / max_personal_preference_error;
 

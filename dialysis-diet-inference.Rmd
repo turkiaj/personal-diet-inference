@@ -1066,6 +1066,7 @@ kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T,
 ```
 ```{r diet_strategies_plot, fig.width=7}
 library(dplyr)
+library(ggplot2)
 
 all_contributions.df <- data.frame()
 
@@ -1082,22 +1083,18 @@ for (person_id in 1:37)
 colnames(all_contributions.df) <- c("person_id", "nutrient", "concentration", "contributions")
 
 # Calculate mean contributions of nutrients for sorting them
-# ! TODO: Make this mean over all concentrations
 
 mean_contributions <- all_contributions.df %>%
-  filter(concentration == 'pk') %>%
   filter(nutrient != 'base') %>%
-  group_by(concentration, nutrient) %>%
+  group_by(nutrient) %>%
   summarise(mean_abs_contribution = mean(abs(as.numeric(contributions)), na.rm = TRUE)) %>%
   ungroup() %>%
-  select(nutrient, mean_abs_contribution)
+  select(nutrient, mean_abs_contribution) 
 
 mean_contributions <- mean_contributions %>%  left_join(dialysis_predictors, by = join_by(nutrient == Name)) 
 
 # Join the mean_abs_contribution column to main data frame for sorting
 df <- all_contributions.df %>%
-#  filter(concentration == 'fpgluk') %>%
-#  filter(person_id %in% c(1,3)) %>%
   left_join(mean_contributions, by = "nutrient") 
 
 # Baselevel of concentration is always sorted first
@@ -1168,6 +1165,7 @@ ggsave("figures/dialysis_diet_strategies.pdf", plot = p)
 library(dplyr)
 library(tidyr)
 library(purrr)
+library(kableExtra)
 
 # Get unique concentrations
 concentrations <- unique(cumulative_concs$concentration)
@@ -1191,43 +1189,95 @@ summary_dfs <- lapply(concentrations, function(conc) {
     rename_with(~ paste0(.x, "_", conc), -nutrient)
 })
 
-# unused additional summaries
-#minmax_contribution = paste0(round(min(as.numeric(contributions)),2), " - ", round(max(as.numeric(contributions)),2))
-#sd_contribution = round(sd(as.numeric(contributions)),2)
-
-
 # Merge the summary data frames into a single data frame
 strategy_summary.df <- reduce(summary_dfs, full_join, by = "nutrient")
 
-# Pretty nutrient names
-all_effects <- data.frame(nutrient = sysdimet_predictors$Name, effect = sysdimet_predictors$ShortDescription)
-strategy_summary.df <- strategy_summary.df %>% left_join(all_effects, by = "nutrient")
-strategy_summary.df$nutrient <- strategy_summary.df$effect
-strategy_summary.df <- subset(strategy_summary.df, select = -c(12))
+strategy_summary.df <- strategy_summary.df %>%
+  left_join(mean_contributions, by = "nutrient") %>%
+  arrange(desc(mean_abs_contribution))
 
-kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
-  col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
+# ShortDescription comes from mean_contributions
+strategy_summary.df$nutrient <- strategy_summary.df$ShortDescription
+strategy_summary.df <- strategy_summary.df[order(strategy_summary.df$mean_abs_contribution, decreasing = TRUE),]
+strategy_summary.df <- subset(strategy_summary.df, select = c(1:7))
+
+kable(strategy_summary.df, "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
+  col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
   add_header_above(c(" " = 1, "P-K" = 2, "fP-Pi" = 2, "P-Alb" = 2), escape = F) %>%
   column_spec(1, width = "7em") %>%
   kable_styling(latex_options="scale_down") %>%  
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) %>%
-  save_kable(file = "tables/dialysis_diet_strategies.pdf", keep_tex = TRUE)
-
-# kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lccc",
-#   col.names = c("Nutrient", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD", "Avg", "Min-Max", "SD")) %>%
-#   add_header_above(c(" " = 1, "Contribution to fS-HDL" = 3, "fS-LDL" = 3, "fS-Ins" = 3, "fS-Chol" = 3, "fp-Gluc" = 3), escape = F) %>%
-#   column_spec(1, width = "7em") %>%
-#   kable_styling(latex_options="scale_down") %>%  
-#   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-#   row_spec(0,bold=TRUE) %>%
-#   save_kable(file = "tables/sysdimet_diet_strategies.pdf", keep_tex = TRUE)
-
-strategy_summary.df
+  row_spec(0,bold=TRUE) #%>%
+  #save_kable(file = "tables/dialysis_diet_strategies.pdf", keep_tex = TRUE)
 
 ```
 
 
+```{r diet_strategies_table_percentages}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(kableExtra)
+
+# Get unique concentrations
+concentrations <- unique(cumulative_concs$concentration)
+
+# Loop through each concentration and create summary statistics
+summary_dfs <- lapply(concentrations, function(conc) {
+  cumulative_concs %>%
+  ungroup() %>%
+    select(nutrient, concentration, contributions, predicted_concentration) %>%
+    filter(concentration == conc) %>%
+    filter(nutrient != "base") %>%
+    mutate(contribution_percentage = as.numeric(contributions) / predicted_concentration * 100) %>%
+    group_by(nutrient) %>%
+    summarise(
+      min_percentage = paste0(round(min(contribution_percentage),1),"%"),
+      max_percentage = paste0(round(max(contribution_percentage),1),"%"),
+      avg_percentage = paste0(round(mean(contribution_percentage),1),"%")
+    ) %>%
+    select(nutrient, min_percentage, max_percentage) %>%
+    rename_with(~ paste0(.x, "_", conc), -nutrient)
+})
+
+# Merge the summary data frames into a single data frame
+strategy_summary.df <- reduce(summary_dfs, full_join, by = "nutrient")
+
+strategy_summary.df <- strategy_summary.df %>%
+  left_join(mean_contributions, by = "nutrient") %>%
+  arrange(desc(mean_abs_contribution))
+
+# ShortDescription comes from mean_contributions
+strategy_summary.df$nutrient <- strategy_summary.df$ShortDescription
+strategy_summary.df <- strategy_summary.df[order(strategy_summary.df$mean_abs_contribution, decreasing = TRUE),]
+strategy_summary.df <- subset(strategy_summary.df, select = c(1:7))
+
+kable(strategy_summary.df, "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
+  col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
+  add_header_above(c(" " = 1, "P-K" = 2, "fP-Pi" = 2, "P-Alb" = 2), escape = F) %>%
+  column_spec(1, width = "7em") %>%
+  row_spec(0,bold=TRUE) %>%
+  kable_styling(latex_options="scale_down") %>%  
+  kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) 
+  save_kable(file = "tables/dialysis_diet_strategies_percentages.pdf", keep_tex = TRUE)
+
+
+```
+
+````{r}
+# Testing percentages
+
+cumulative_concs %>%
+   ungroup() %>%
+   filter(nutrient == "epa" & concentration == "fsins") %>%
+   arrange(desc(contributions)) %>%
+   select(person_id, contributions, predicted_concentration) %>%
+   mutate(percentage = as.numeric(contributions) / predicted_concentration * 100) %>%
+   arrange(desc(percentage))
+
+cumulative_concs
+
+```
 
 # TRASHCAN
 
