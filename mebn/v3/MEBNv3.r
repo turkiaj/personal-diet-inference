@@ -3000,7 +3000,7 @@ mebn.plot_typical_effects <- function(reaction_graph, top_effects, graph_layout 
   #E(visual_graph)[E(visual_graph)$weight > 0]$color="#444444"
   #E(visual_graph)[E(visual_graph)$weight < 0]$color="#AAAAAA"
 
-  E(visual_graph)$width = abs(E(visual_graph)$weight) * 4
+  E(visual_graph)$width = log(abs(E(visual_graph)$weight)*5)
 
   plot(visual_graph, 
        layout=graph_layout, 
@@ -3014,8 +3014,8 @@ mebn.plot_typical_effects <- function(reaction_graph, top_effects, graph_layout 
        margin=0,
        layout.par = par(mar=c(3.0,0,0,0)))
 
-  #axis(1, at = -1:1, labels=c("Nutrients", "Processes and organs", "Personal goals"), cex.axis=0.7)
-  #axis(1, at = 1:4)
+  axis(1, at = -1:1, labels=c("Nutrients", "General effects", "Concentrations"), cex.axis=0.7)
+  #axis(1, at = 1:3)
   
   return(graph_layout)
 }
@@ -3818,7 +3818,11 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
   
   # low EPA-simulation
   #Q_beta_point[,14] <- Q_beta_point[,14] * 0.1
-  Q_beta_point[,14] <- 0
+  #Q_beta_point[,14] <- 0
+
+  # low cvit-simulation
+  #Q_beta_point[,13] <- Q_beta_point[,13] * 0.5
+  #Q_beta_point[,14] <- 0
   
   if (X_point_est == "mean")
   {

@@ -162,11 +162,11 @@ example_predictors.df <- example_predictors %>%
         Unit == "" ~ paste0(Lowerbound, " - ", Upperbound),
         Unit != "" ~ paste0(Lowerbound, " - ", Upperbound)
     )) %>%
-#    mutate(RI = case_when(
-#        is.na(Recommendation) ~ "",
-#        Unit == "" ~ as.character(Recommendation),
-#        Unit != "" ~ as.character(Recommendation)
-#    )) %>%
+    mutate(RI = case_when(
+        is.na(Recommendation) ~ "",
+        Unit == "" ~ as.character(Recommendation),
+        Unit != "" ~ as.character(Recommendation)
+    )) %>%
     mutate(Study = case_when(
         Dialysis == TRUE & Sysdimet == TRUE ~ "In both studies",
         Dialysis == TRUE & Sysdimet == FALSE ~ "Dialysis only",
@@ -180,18 +180,19 @@ example_predictors.df <- example_predictors %>%
     mutate(Sysdimet = ifelse(sysdimet_mean > 0, paste0(sysdimet_mean, "\\pm", sysdimet_sd), "-")) %>%
     mutate(Dialysis = ifelse(dialysis_mean > 0, paste0(dialysis_mean, "\\pm", dialysis_sd), "-")) %>%
     arrange(Order) %>%
-#    select(Predictor, Range, RI, Sysdimet, Dialysis)
-    select(Predictor, Range, Sysdimet, Dialysis)
+    select(Predictor, Range, RI, Sysdimet, Dialysis)
 
-kable(example_predictors.df, format = "latex", escape = F, booktabs = T, row.names = FALSE, 
+kable(example_predictors.df, format = "html", escape = F, booktabs = T, row.names = FALSE, 
       caption = "Nutrients that were analyzed and personalized in each of the studied examples.",
-   col.names = c("Nutrient", "General recommendation", "Sysdimet", "Dialysis")) %>%
-   add_header_above(c("","", "Sample mean \\pmSD" = 2)) %>%
+   col.names = c("Nutrient", "Proposed range", "RI", "Sysdimet", "Dialysis")) %>%
+   add_header_above(c("","","", "Sample mean \\pmSD" = 2)) %>%
    kable_styling(latex_options="scale_down") %>%  
    kable_styling(latex_options = c("basic", "condensed"), full_width = FALSE) %>%
-   row_spec(0,bold=TRUE) %>%
-   save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
+   row_spec(0,bold=TRUE) 
+   # %>% save_kable(file = "tables/studied_nutrients.pdf", keep_tex = TRUE)
 
+
+example_predictors.df
 ```
 
 ```{r fig.width=10, fig.height=7}
@@ -419,6 +420,7 @@ for (graph_person_id in 1:37) {
   recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
   
   if (check_failed_concs(graph_person_id, personal_info, recommeded_concentrations) == TRUE) { 
+    print(subject_code)
     print(graph_person_id)
   }
 }
@@ -628,7 +630,7 @@ saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/s
   
 ```
 
-```{r fig.height=8, inference_debug}
+```{r fig.height=6, inference_debug}
 
 pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
 fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
@@ -644,12 +646,12 @@ conc_plot1 <- ggplot(recommendation_intake.df) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot2 <- ggplot(recommendation_intake.df) +
-  geom_point(aes(y=lp, x=fppi, color=preference), show.legend=FALSE) +
+  geom_point(aes(y=lp, x=fppi, color=preference), show.legend=TRUE) +
   geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
 conc_plot3 <- ggplot(recommendation_intake.df) +
-  geom_point(aes(y=lp, x=palb, color=preference), show.legend=FALSE) +
+  geom_point(aes(y=lp, x=palb, color=preference), show.legend=TRUE) +
   geom_vline(xintercept = palb_recommendations, linetype="solid", color = "black", linewidth=0.4) +
   scale_color_gradientn(colours = colorspace::diverge_hcl(7))
 
@@ -1064,6 +1066,7 @@ kable(recommendation_table.df[1:14], format = "latex", escape = F, booktabs = T,
    save_kable(file = "tables/recommendations_dialysis_change.pdf", keep_tex = TRUE)
 
 ```
+
 ```{r diet_strategies_plot, fig.width=7}
 library(dplyr)
 library(ggplot2)

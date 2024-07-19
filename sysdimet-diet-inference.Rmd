@@ -123,17 +123,18 @@ bipa_layout <- cbind(bipa_layout[,2]*gap, bipa_layout[,1])
 V(initial_graph)[V(initial_graph)$type == "100"]$label.degree = pi # left side
 V(initial_graph)[V(initial_graph)$type == "200"]$label.degree = 0 # right side 1.53
 
-plot(initial_graph,
-       layout=bipa_layout, 
-       rescale=TRUE,
-       vertex.label.color="black",
-       vertex.label.cex=0.7,
-       vertex.label.dist=3.8,
-       edge.arrow.size=0.5,
-       edge.arrow.width=1,
-       axes=FALSE,
-       margin=0,
-       layout.par = par(mar=c(0,0,0,0)))
+#plot(initial_graph,
+#       layout=bipa_layout, 
+#       rescale=TRUE,
+#       vertex.label.color="black",
+#       vertex.label.cex=0.7,
+#       vertex.label.dist=3.8,
+#       edge.arrow.size=0.5,
+#       edge.arrow.width=1,
+#       axes=FALSE,
+#       margin=0,
+#       layout.par = par(mar=c(0,0,0,0)))
+
 
 ```
 
@@ -158,6 +159,19 @@ sysdimet_multivariate <- mebn.bipartite_multivariate(reaction_graph = initial_gr
 
 write.graph(sysdimet_multivariate, "graphs/sysdimet_gamma_qr_mv.graphml", "graphml")
 ```
+
+
+```{r}
+source("mebn/v3/MEBNv3.r")
+#sysdimet_multivariate
+# TODO: Update graph to friendly names
+
+sysdimet_datadesc[sysdimet_datadesc$Name == V(sysdimet_multivariate),]$ShortDescription
+
+graph_layout <- mebn.plot_typical_effects(sysdimet_multivariate, 20, graph_layout = bipa_layout)
+
+```
+
 
 ```{r}
 # Model diagnostics
@@ -324,7 +338,7 @@ library(gridExtra)
   
 # Query parameters
 simulation <- "X50_B50_A50_I50"
-simulation <- "_lowEPA"
+#simulation <- "_lowEPA"
 
 # - data parameters
 graph_dir <- "graphs/sysdimet/gamma_qr_mv/"
@@ -361,7 +375,11 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
 for (person_id in 1:length(kontrolli)) {
-#for (person_id in 9:9) {
+
+# 104 / 3 -- c vit korkealla ja myös insu ja gluc.. siksikö? joo
+# personal_cvit_fpgluk = -0.02382
+
+#for (person_id in 3:3) {
   
   subject_code <- kontrolli[person_id]
 
@@ -396,7 +414,7 @@ for (person_id in 1:length(kontrolli)) {
         l3 <- 30
         l5 <- 1.1
       }
-    
+      
       intake_model <- mebn.Query(reaction_graph = personal_graph,
                                graph_dir = personal_model_dir,
                                queried_nodes = queried_nodes,
@@ -413,12 +431,12 @@ for (person_id in 1:length(kontrolli)) {
                                posterior_samples = 500,
                                repeat_only = 0,
                                verbose = 1,
-                               l1 = 8,
-                               l2 = 15,
-                               l3 = l3,
-                               l4 = 30,
-                               l5 = l5,
-                               l6 = 10)
+                               l1 = 8,      # bound_steepness: Steepness parameter for individual soft bounds
+                               l2 = 15,     # bound_requirement: Requirement for meeting all bounds
+                               l3 = l3,     # preference_strength: Weighting for preference in the model
+                               l4 = 30,     # transition_steepness: Steepness for the transition between model components
+                               l5 = l5,     # penalty_rate: Rate at which preference errors are penalized
+                               l6 = 10)     # general_recommendation_prior: Weight for general recommendation in proposal distributions 
 
         #params <- readRDS("last_params.rds")
         #params
@@ -523,6 +541,14 @@ saveRDS(patient_summary, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation
 ```
 
 
+```{r}
+
+ggplot(data=recommendation_intake.df[order(-recommendation_intake.df$proposal),]) +
+  geom_line(aes(y=proposal, x=cvit, color=preference)) 
+
+```
+
+
 ```{r fig.height=8, inference_debug}
 
 fshdl_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
@@ -591,6 +617,8 @@ library(dplyr)
 datadesc <- sysdimet_datadesc
 queried_nodes <- as.vector(datadesc[datadesc$Condition >= 100,]$Name)
 
+simulation <- "X50_B50_A50_I50"
+
 # - current levels are joined with this summary
 recommendation_with_concpreds.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary.rds"))
 
@@ -606,6 +634,8 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
   graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
 
   graph_dir <- paste0("graphs/sysdimet/gamma_qr_mv/",graph_person_id)
+  print(graph_dir)
+  
   personal_graph <- read.graph(paste0(graph_dir, "/personal_graph.graphml"), "graphml")
   nodes <- V(personal_graph)
 
@@ -695,9 +725,9 @@ effect_summary <- personal_effects %>%
   ) %>%
   arrange(desc(abs(effect_avg)))
 
+#effect_summary[effect_summary$effect=="cvit_fsins",]
 
-effect_summary[effect_summary$effect=="epa_fshdl",]
-
+#effect_summary
 ```
 
 
@@ -719,7 +749,7 @@ effect_summary <- personal_effects %>%
                 max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))])
   ) %>%
   arrange(desc(abs(effect_avg))) %>%
-  top_n(20)
+  top_n(100)
 
 effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
 
@@ -743,13 +773,13 @@ colnames(effect_desc.df) <- c("effect", "effect_description", "nutrient", "conce
 
 effect_summary_table.df <- effect_summary_table.df %>% left_join(effect_desc.df, by = "effect")
 
-kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lccccccccccc",
+kable(effect_summary_table.df[c(6,2:5)], "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lccccccccccc",
   col.names = c("Effect", "Avg. effect", "Effect sd.", "Min. personal effect", "Max personal effect")) %>%
   column_spec(1, width = "7em") %>%
   kable_styling(latex_options="scale_down") %>%  
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) %>%
-  save_kable(file = "tables/sysdimet_effects.pdf", keep_tex = TRUE)
+  row_spec(0,bold=TRUE)# %>%
+#  save_kable(file = "tables/sysdimet_effects.pdf", keep_tex = TRUE)
 
 ```
 
@@ -1048,9 +1078,9 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 # Only patients with non-optimal concentrations are included in the recommendation
 
-subjects_with_failed_concs <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds")
+subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
-sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
+sysdimet_lp_plots(subjects_with_failed_concs[1:10,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
 #sysdimet_lp_plots(subjects_with_failed_concs$subject_code, "figures/sysdimet_fixed_concentrations_all.pdf")
 
 ```
@@ -1063,7 +1093,7 @@ sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdim
 library(tibble)
 library(dplyr)
 
-intake.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds")
+intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
 recommendation <- colnames(intake.df)[4:(4+14)]
 
@@ -1362,7 +1392,7 @@ nutrient_labels <- setNames(cumulative_concs$ShortDescription, cumulative_concs$
 nutrient_labels <- paste0("+ ", nutrient_labels[!duplicated(names(nutrient_labels))])
 nutrient_labels[16] <- "Baseline"
 
-conc_labels <- c(fshdl = "fS-HDL (mmol/l)", fsldl = "fS-LDL (mmol/l)", fsins = "fS-Ins (mmol/l)", fskol = "fS-Chol (mmol/l)", fpgluk = "fP-Gluc (mmol/l)")
+conc_labels <- c(fshdl = "HDL-C (mmol/l)", fsldl = "LDL-C (mmol/l)", fsins = "Insulin (mmol/l)", fskol = "TC (mmol/l)", fpgluk = "Glucose (mmol/l)")
 
 #library("viridis")
 
@@ -1378,7 +1408,7 @@ p <- ggplot(cumulative_concs) +
    geom_path(aes(x = predicted_concentration, y = nutrient, group = subject_id, color = subject_id, alpha = highlight_alpha, linewidth=highlight_width), show.legend = FALSE) +
    geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
    geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
-   scale_linewidth_continuous(range = c(0.5, 1.0))  +
+   scale_linewidth_continuous(range = c(0.6, 0.8))  +
    scale_alpha_continuous(range = c(0.4, 1.0))  +
    facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
    scale_y_discrete(labels = nutrient_labels) + 
@@ -1388,10 +1418,37 @@ p <- ggplot(cumulative_concs) +
 
  p
 
-#ggsave("figures/sysdimet_diet_strategies_lowEPA.pdf", plot = p)
+ggsave("figures/sysdimet_diet_strategies.pdf", plot = p)
+
+```
+```{r}
+cumulative_concs[cumulative_concs$subject_code == "S104" & cumulative_concs$concentration == "fsins",]
 
 
 ```
+
+```{r vitamin_effects, fig.width=8, fig.height=6}
+library(ggplot2)
+
+#conts <- as.data.frame(cumulative_concs[cumulative_concs$nutrient != "base",])
+conts <- as.data.frame(cumulative_concs[cumulative_concs$nutrient %in% c("cvit","dvit"),])
+
+conts$abs_contribution <- abs(as.numeric(conts$contributions))
+
+p <- ggplot(conts, aes(fill=nutrient, y=abs_contribution, x=reorder(subject_code, -abs_contribution))) + 
+    geom_bar(position="stack", stat="identity") +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    facet_wrap(~concentration, scales = "free", labeller = labeller(concentration = conc_labels)) +
+    xlab("Patients") +
+    ylab("Absolute contribution of nutrients")
+p
+ 
+ggsave("figures/sysdimet_diet_vitamin_effects.pdf", plot = p)
+
+```
+
+
 
 ```{r diet_strategies_table}
 library(dplyr)
@@ -1871,38 +1928,189 @@ check_failed_fpgluk <- function(graph_person_id, personal_info, recommeded_conce
 
 ```
 
+```{r difficult_limits}
+library(ggplot2)
+library(dplyr)
 
-```{r}
+preds.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
-intake.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+#limit_reasoning.df <- data.frame(subject_code = sprintf("S%02d", preds.df$subject_code))
 
-person_id <- 1
-subject_code <- kontrolli[person_id]
-graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
+limit_reasoning.df <- data.frame(matrix(ncol = 2, nrow = 0), row.names = NULL)
 
-personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
-recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
+for (i in 1:nrow(preds.df)) {
+  p <- preds.df[i,]
+  
+  subject_code <- sprintf("S%02d", p$subject_code)
+  personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
+  
+  diffs.df <- data.frame(matrix(ncol = 0, nrow = 1), row.names = NULL)
+  
+  for (t in 1:5) {
+    ul <- recommeded_concentrations$upper_limits[t]
+    t_name <- sysdimet_targets[t,]$Name
+    pred_ul <- p[t_name]
+  
+    t_diff <- abs(ul-pred_ul)
+    
+    diffs.df[t_name] <- t_diff 
+  }   
+  
+  limit_reasoning.df <- rbind(limit_reasoning.df, c(subject_code = subject_code, diffs.df))
+}
 
-check_failed_fpgluk(graph_person_id, personal_info, recommeded_concentrations) # -> TRUE
+fpgluk_diff <- limit_reasoning.df[,c(1,6)]
 
-recommendation <- colnames(intake.df)[4:(4+14)]
+fpgluk_conts <- cumulative_concs[cumulative_concs$concentration == "fpgluk" & cumulative_concs$nutrient != "base",]
 
-intake.df %>%
-          mutate(across(.cols = recommendation,
-                        .fns = ~get(glue::glue("current_{cur_column()}"))
-                        .names = "{.col}_diff"))
+reason.df <- fpgluk_diff %>% inner_join(fpgluk_conts, by="subject_code")
 
-intake.df %>%
-  mutate(
-    epa_diff = epa - current_epa 
-  ) %>%
-  select(
-    current_fpgluk,
-    fpgluk,
-    epa_diff
-  ) 
+reason.df
+
+#  filter(subject_code == "S104") %>%
+
+fpgluk_reason.df <- reason.df %>%
+  group_by(subject_code) %>%
+  summarise(diff = min(fpgluk), neg_cont = sum(contributions < 0))
+
+ggplot(fpgluk_reason.df) + 
+    geom_point(aes(x=diff, y=neg_cont))
 
 
+
+conts <- as.data.frame(cumulative_concs[cumulative_concs$nutrient != "base",])
+conts <- as.data.frame(cumulative_concs[cumulative_concs$nutrient %in% c("cvit"),])
+conts <- as.data.frame(cumulative_concs[cumulative_concs$nutrient %in% c("cvit","dvit"),])
+
+conts$abs_contribution <- abs(as.numeric(conts$contributions))
+
+ggplot(conts, aes(fill=nutrient, y=abs_contribution, x=reorder(subject_code, -abs_contribution))) + 
+    geom_bar(position="stack", stat="identity") +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+    facet_wrap(~concentration,scales = "free_y", labeller = labeller(concentration = conc_labels)) 
+
+limit_reasoning.df
+```
+
+
+```{r diet_strategies_plot_reasoning, fig.width=7, fig.height=8}
+library(dplyr)
+library(ggplot2)
+
+all_contributions.df <- data.frame()
+
+simulation <- "X50_B50_A50_I50"
+
+for (person_id in 1:90)
+{
+  contr_file <- paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/contributions_",person_id,".rds")
+  
+  if (file.exists(contr_file)) {
+    contributions.df <- readRDS(contr_file)
+    all_contributions.df <- rbind(all_contributions.df, cbind(person_id, contributions.df))
+  }
+}
+
+colnames(all_contributions.df) <- c("person_id", "nutrient", "concentration", "contributions")
+
+# Calculate mean contributions of nutrients for sorting them
+
+mean_contributions <- all_contributions.df %>%
+  filter(nutrient != 'base') %>%
+  group_by(nutrient) %>%
+  summarise(mean_abs_contribution = mean(abs(as.numeric(contributions)), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(nutrient, mean_abs_contribution) 
+
+mean_contributions <- mean_contributions %>%  left_join(sysdimet_predictors, by = join_by(nutrient == Name)) 
+
+# Join the mean_abs_contribution column to main data frame for sorting
+df <- all_contributions.df %>%
+  left_join(mean_contributions, by = "nutrient") 
+
+# Baselevel of concentration is always sorted first
+df[df$nutrient == "base",]$mean_abs_contribution <- 100
+
+# Calculate the cumulative concentrations 
+cumulative_concs <- df %>% 
+     group_by(person_id, concentration) %>%
+     arrange(desc(abs(mean_abs_contribution))) %>%
+     mutate(predicted_concentration = cumsum(contributions)) %>%
+     arrange(abs(mean_abs_contribution)) %>%
+     mutate(nutrient=factor(nutrient, levels=nutrient)) %>%
+     mutate(person_id=factor(person_id))
+
+
+# Add subject codes for plotting and personal limits
+subject_codes <- data.frame()
+limit_data <- data.frame()
+subjects <- levels(sysdimet$SUBJECT_ID)
+
+for (person_id in as.numeric(levels(cumulative_concs$person_id)))
+{
+  #print(person_id)  #12, 26
+  #print(subject_code) # S104, S108
+
+  subject_code <- subjects[person_id]
+  subject_id <- as.numeric(gsub("S","",subject_code))
+  
+  subject_codes <- rbind(subject_codes, c(person_id, subject_id, subject_code))  
+  
+  # Normal ranges of concentration are personalized
+  personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
+  recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
+
+  l.df <- data.frame(concentration = sysdimet_targets$Name, lower_limits = as.vector(recommeded_concentrations$lower_limits), upper_limits = as.vector(recommeded_concentrations$upper_limits))
+  
+  limit_data <- rbind(limit_data, l.df)
+}
+
+limit_data <- unique(limit_data)
+colnames(subject_codes) <- c("person_id", "subject_id", "subject_code")
+
+cumulative_concs <- cumulative_concs %>% left_join(subject_codes, join_by(person_id))
+cumulative_concs$subject_code <- factor(cumulative_concs$subject_code)
+cumulative_concs$subject_id <- factor(cumulative_concs$subject_id)
+
+nutrient_labels <- setNames(cumulative_concs$ShortDescription, cumulative_concs$nutrient)
+nutrient_labels <- paste0("+ ", nutrient_labels[!duplicated(names(nutrient_labels))])
+nutrient_labels[16] <- "Baseline"
+
+conc_labels <- c(fshdl = "fS-HDL (mmol/l)", fsldl = "fS-LDL (mmol/l)", fsins = "fS-Ins (mmol/l)", fskol = "fS-Chol (mmol/l)", fpgluk = "fP-Gluc (mmol/l)")
+
+
+simulation <- "X50_B50_A50_I50"
+subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
+
+cumulative_concs$example <- cumulative_concs$subject_id %in%subjects_with_failed_concs[1:5,]$subject_code 
+cumulative_concs$highlight_alpha <- ifelse(cumulative_concs$example, 1, 0.5)
+cumulative_concs$highlight_width <- ifelse(cumulative_concs$example, 1.0, 0.5)
+
+cumulative_concs <- cumulative_concs %>% filter(subject_code == "S104" | subject_code == "S105" | subject_code == "S64" | subject_code == "S48"| subject_code == "S69" | subject_code == "S12")
+
+p <- ggplot(cumulative_concs) +
+   geom_point(aes(x = predicted_concentration, y = nutrient, color = subject_id), alpha = 0.8, size = 0.8, show.legend = FALSE) +
+   geom_path(aes(x = predicted_concentration, y = nutrient, group = subject_id, color = subject_id), alpha = 0.8, linewidth=0.6, show.legend = TRUE) +
+   geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
+   geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
+   scale_linewidth_continuous(range = c(0.6, 0.8))  +
+   scale_alpha_continuous(range = c(0.4, 1.0))  +
+   facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+   scale_y_discrete(labels = nutrient_labels) + 
+   theme_bw() +
+   labs(x = element_blank(), y = element_blank(), color="Subject") +
+   guides(color = guide_legend(override.aes = list(alpha = 1, size = 1)))  
+
+ p
 
 ```
+
+
+```{r}
+cumulative_concs
+intake.df[intake.df$subject_code=="104",]
+```
+
+
 
