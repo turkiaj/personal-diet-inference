@@ -1,0 +1,511 @@
+---
+title: "Supplementary figures"
+output: html_document
+date: "2024-07-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r original_limits_of_concentration}
+library(ggplot2)
+
+shape <- 3
+
+mu1 <- 160
+mu2 <- 330
+
+rate <- shape / mu1
+shift <- mu2 - mu1
+
+c <- 0.9
+lower_quantile_value <- qgamma(1-c, shape = shape, rate = rate)
+upper_quantile_value <- qgamma(c, shape = shape, rate = rate)
+
+lower_limit1 <- lower_quantile_value
+upper_limit1 <- upper_quantile_value
+
+lower_limit2 <- lower_quantile_value + shift
+upper_limit2 <- upper_quantile_value + shift
+
+#mu_lower_adjustment <- expected_value - lower_quantile_value 
+#mu_upper_adjustment <- upper_quantile_value - expected_value 
+
+x_max <- 800
+x_values <- seq(0,x_max, by = 0.1)
+
+y1_values <- dgamma(x_values, shape = shape, rate = rate)
+
+# upper gamma is calculated in same position than lower (x_values-shift)
+y2_values <- dgamma(x_values-shift, shape = shape, rate = rate)
+
+data <- data.frame(x = x_values, y1 = y1_values, y2 = y2_values)
+
+ggplot(data) +
+    geom_ribbon(aes(x = x, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2 + shift, y1, NA)), fill = "blue", alpha = 0.3) + 
+    geom_ribbon(aes(x = x + shift, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2, y2, NA)), fill = "red", alpha = 0.3) + 
+    geom_line(aes(x = x, y = y1), color = "darkgrey", linewidth = 0.5) + 
+    geom_line(aes(x = x + shift, y = y2), color = "darkgrey", linewidth = 0.5) + 
+    #geom_vline(xintercept = mu1, linetype="dashed", color = "black", linewidth=0.3) +
+    #geom_vline(xintercept = mu2 + shift, linetype="dashed", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = lower_limit1, linetype="solid", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = upper_limit2 + shift, linetype="solid", color = "black", linewidth=0.3) +
+    theme_classic() +
+  scale_x_continuous(limits = c(0, x_max))
+
+```
+```{r adjusted_limits_of_concentration}
+library(ggplot2)
+
+shape <- 3
+
+mu1 <- 160
+mu2 <- 330
+
+rate <- shape / mu1
+shift <- mu2 - mu1
+
+c <- 0.9
+lower_quantile_value <- qgamma(1-c, shape = shape, rate = rate)
+upper_quantile_value <- qgamma(c, shape = shape, rate = rate)
+
+lower_limit1 <- lower_quantile_value
+upper_limit1 <- upper_quantile_value
+
+lower_limit2 <- lower_quantile_value + shift
+upper_limit2 <- upper_quantile_value + shift
+
+x_max <- 800
+x_values <- seq(0,x_max, by = 0.1)
+
+y1_values <- dgamma(x_values, shape = shape, rate = rate)
+
+# upper gamma is calculated in same position than lower (x_values-shift)
+y2_values <- dgamma(x_values-shift, shape = shape, rate = rate)
+
+data <- data.frame(x = x_values, y1 = y1_values, y2 = y2_values)
+
+ggplot(data) +
+    geom_ribbon(aes(x = x, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2 + shift, y1, NA)), fill = "blue", alpha = 0.3) + 
+    geom_ribbon(aes(x = x + shift, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2, y2, NA)), fill = "red", alpha = 0.3) + 
+    geom_line(aes(x = x, y = y1), color = "darkgrey", linewidth = 0.5) + 
+    geom_line(aes(x = x + shift, y = y2), color = "darkgrey", linewidth = 0.5) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=mu1, alpha = .2) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=mu2+shift, xmax=Inf, alpha = .2) + 
+    geom_vline(xintercept = mu1, linetype="solid", color = "black", linewidth=0.3) +
+    geom_vline(xintercept = mu2 + shift, linetype="solid", color = "black", linewidth=0.3) +
+    theme_classic() +
+  scale_x_continuous(limits = c(0, x_max))
+
+```
+
+```{r smooth_adjusted_limits_of_concentration}
+library(ggplot2)
+
+inv_logit <- function(x, steepness) {
+  1 / (1 + exp(-steepness*x))
+}
+
+shape <- 3
+
+mu1 <- 160
+mu2 <- 330
+
+rate <- shape / mu1
+shift <- mu2 - mu1
+
+c <- 0.9
+lower_quantile_value <- qgamma(1-c, shape = shape, rate = rate)
+upper_quantile_value <- qgamma(c, shape = shape, rate = rate)
+
+lower_limit1 <- lower_quantile_value
+upper_limit1 <- upper_quantile_value
+
+lower_limit2 <- lower_quantile_value + shift
+upper_limit2 <- upper_quantile_value + shift
+
+x_max <- 800
+x_values <- seq(0,x_max, by = 0.1)
+
+y1_values <- dgamma(x_values, shape = shape, rate = rate)
+
+# upper gamma is calculated in same position than lower (x_values-shift)
+y2_values <- dgamma(x_values-shift, shape = shape, rate = rate)
+
+inv_logit_values1 <- inv_logit(x_values - mu1 + 2, steepness = 0.4)
+inv_logit_values1 <- inv_logit_values1 * max(y1_values)
+
+inv_logit_values2 <- 1-inv_logit(x_values - mu2 - shift + 2, steepness = 0.4)
+inv_logit_values2 <- inv_logit_values2 * max(y2_values)
+
+data <- data.frame(x = x_values, y1 = y1_values, y2 = y2_values, inv_logit1 = inv_logit_values1, inv_logit2 = inv_logit_values2)
+
+ggplot(data) +
+    geom_ribbon(aes(x = x, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2 + shift, y1, NA)), fill = "blue", alpha = 0.3) + 
+    geom_ribbon(aes(x = x + shift, ymin = 0, ymax = ifelse(x >= lower_limit1 & x <= upper_limit2, y2, NA)), fill = "red", alpha = 0.3) + 
+    geom_line(aes(x = x, y = y1), color = "darkgrey", linewidth = 0.5) + 
+    geom_line(aes(x = x + shift, y = y2), color = "darkgrey", linewidth = 0.5) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=mu1, alpha = .2) + 
+    annotate("rect",ymin=-Inf, ymax=Inf, xmin=mu2+shift, xmax=Inf, alpha = .2) + 
+    geom_vline(xintercept = mu1, linetype="dashed", color = "black", linewidth=0.3) +
+    geom_line(aes(x = x, y = inv_logit_values1), color = "blue", linewidth = 0.5) + 
+    geom_vline(xintercept = mu2 + shift, linetype="dashed", color = "black", linewidth=0.3) +
+    geom_line(aes(x = x, y = inv_logit_values2), color = "red", linewidth = 0.5) + 
+    theme_classic() +
+  scale_x_continuous(limits = c(0, x_max))
+
+```
+
+
+```{r fig.height=3, fig.width=10}
+library(ggplot2)
+library(gridExtra)
+  
+concinfo.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+simulation <- "X50_B50_A50_I50"
+
+persons <- 1
+subject_code <- 1581
+
+pk_scale_min <- min(3.4, concinfo.df$current_pk[1:persons])-0.1
+pk_scale_max <- max(4.7, concinfo.df$current_pk[1:persons])+0.3
+fppi_scale_min <- min(0.9, concinfo.df$current_fppi[1:persons])-0.1
+fppi_scale_max <- max(1.78, concinfo.df$current_fppi[1:persons])+0.1
+palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
+palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
+
+point_size <- 1.0
+
+#gradient_colors <- colorspace::heat_hcl(3)
+gradient_colors <- colorspace::diverge_hcl(7)
+  
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+# Get personal normal ranges 
+
+personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
+
+pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
+fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
+palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+
+# Get current personal info and predictions
+
+curr_pk <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_pk
+curr_fppi <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_fppi
+curr_palb <- concinfo.df[concinfo.df$subject_code == subject_code,]$current_palb
+
+pred_pk <- concinfo.df[concinfo.df$subject_code == subject_code,]$pk
+pred_fppi <- concinfo.df[concinfo.df$subject_code == subject_code,]$fppi
+pred_palb <- concinfo.df[concinfo.df$subject_code == subject_code,]$palb
+
+conc_plot1 <- ggplot(accepted_intake.df) +
+geom_point(aes(y=lp, x=pk, color=preference), size = point_size, show.legend = FALSE) +
+geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
+geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
+geom_vline(xintercept = curr_pk, linetype="dashed", color = "black", linewidth=0.3) +
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=pk_recommendations[1], alpha = .2) + 
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=pk_recommendations[2], xmax=Inf, alpha = .2) + 
+scale_x_continuous(limits=c(pk_scale_min, pk_scale_max), breaks=pk_recommendations) +
+scale_color_gradientn(colours = colorspace::diverge_hcl(7)) +
+theme_bw() +
+scale_color_gradientn(colours = gradient_colors) +
+theme(panel.grid.minor = element_blank()) +
+labs(x = "P-K (mmol/l)", y = paste0("\nlog-prob.")) 
+
+conc_plot2 <- ggplot(accepted_intake.df) +
+geom_point(aes(y=lp, x=fppi, color=preference), size = point_size, show.legend = FALSE) +
+geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
+geom_vline(xintercept = curr_fppi, linetype="dashed", color = "black", linewidth=0.3) +
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fppi_recommendations[1], alpha = .2) + 
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=fppi_recommendations[2], xmax=Inf, alpha = .2) + 
+scale_x_continuous(limits=c(fppi_scale_min, fppi_scale_max), breaks=fppi_recommendations) +
+scale_color_gradientn(colours = gradient_colors) +
+theme_bw() +
+theme(panel.grid.minor = element_blank()) +
+labs(x = "fP-Pi (mmol/l)", y = element_blank())
+
+conc_plot3 <- ggplot(accepted_intake.df) +
+geom_point(aes(y=lp, x=palb, color=preference), size = point_size, show.legend = FALSE) +
+geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
+geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
+geom_vline(xintercept = curr_palb, linetype="dashed", color = "black", linewidth=0.3) +
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=palb_recommendations[1], alpha = .2) + 
+annotate("rect",ymin=-Inf, ymax=Inf, xmin=palb_recommendations[2], xmax=Inf, alpha = .2) + 
+scale_x_continuous(limits=c(palb_scale_min, palb_scale_max), breaks=c(34,36,45)) +
+scale_color_gradientn(colours = gradient_colors) +
+theme_bw() +
+theme(panel.grid.minor = element_blank()) +
+labs(x = "P-Alb (mmol/l)", y = element_blank())
+
+conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0, widths=c(1.1,1,1))
+      
+```
+
+```{r}
+
+```
+
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "kalium"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=kalium, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$kalium, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_kalium, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Potassium (g/d)", y = paste0("\nlog-prob.")) 
+  
+```
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "fosfori"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=fosfori, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$fosfori, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_fosfori, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Phosphorous (g/d)", y = paste0("\nlog-prob.")) 
+  
+```
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "kuitu"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=kuitu, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$kuitu, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_kuitu, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Fiber (g/d)", y = paste0("\nlog-prob.")) 
+  
+  #scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+```
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "hhepros"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=hhepros, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$hhepros, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_hhepros, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Vit. D (g/d)", y = paste0("\nlog-prob.")) 
+  
+  #scale_color_gradientn(colours = colorspace::diverge_hcl(7))
+
+```
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "protepros"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=protepros, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$protepros, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_protepros, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Protein (E%)", y = paste0("\nlog-prob.")) 
+
+```
+
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_id <- 105
+subject_code <- "S105"
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_id,]
+graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
+
+accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- sysdimet_datadesc
+nutrient <- "cvit"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=cvit, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$cvit, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_cvit, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Vit. C (g/d)", y = paste0("\nlog-prob.")) 
+  
+```
+
+
+```{r diet_strategies_plot, fig.width=7}
+library(dplyr)
+library(ggplot2)
+
+all_contributions.df <- data.frame()
+
+for (person_id in 3:20)
+{
+  contr_file <- paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/contributions_",person_id,".rds")
+  
+  if (file.exists(contr_file)) {
+    contributions.df <- readRDS(contr_file)
+    all_contributions.df <- rbind(all_contributions.df, cbind(person_id, contributions.df))
+  }
+}
+
+colnames(all_contributions.df) <- c("person_id", "nutrient", "concentration", "contributions")
+
+# Calculate mean contributions of nutrients for sorting them
+
+mean_contributions <- all_contributions.df %>%
+  filter(nutrient != 'base') %>%
+  group_by(nutrient) %>%
+  summarise(mean_abs_contribution = mean(abs(as.numeric(contributions)), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(nutrient, mean_abs_contribution) 
+
+mean_contributions <- mean_contributions %>%  left_join(dialysis_predictors, by = join_by(nutrient == Name)) 
+
+# Join the mean_abs_contribution column to main data frame for sorting
+df <- all_contributions.df %>%
+  left_join(mean_contributions, by = "nutrient") 
+
+# Baselevel of concentration is always sorted first
+df[df$nutrient == "base",]$mean_abs_contribution <- 100
+
+# Calculate the cumulative concentrations 
+cumulative_concs <- df %>% 
+     group_by(person_id, concentration) %>%
+     arrange(desc(abs(mean_abs_contribution))) %>%
+     mutate(predicted_concentration = cumsum(contributions)) %>%
+     arrange((abs(mean_abs_contribution))) %>%
+     mutate(nutrient=factor(nutrient, levels=nutrient)) %>%
+     mutate(person_id=factor(person_id))
+
+
+# Add subject codes for plotting and personal limits
+limit_data <- data.frame()
+
+for (person_id in as.numeric(levels(cumulative_concs$person_id)))
+{
+    subject_code <- levels(dialysis$potilas)[person_id]
+    treatment <- unique(dialysis[dialysis$potilas == subject_code,]$hoitomuoto)
+
+    #print(person_id)
+    #print(subject_code)
+  
+    # Normal ranges of concentration are personalized
+    personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
+    recommeded_concentrations <- mebn.get_personal_dialysis_guidelines(personal_info, patient_in_dialysis = TRUE)
+  
+    l.df <- data.frame(concentration = dialysis_targets$Name, lower_limits = as.vector(recommeded_concentrations$lower_limits), upper_limits = as.vector(recommeded_concentrations$upper_limits))
+  
+  limit_data <- rbind(limit_data, l.df)
+}
+
+limit_data <- unique(limit_data)
+
+nutrient_labels <- setNames(cumulative_concs$ShortDescription, cumulative_concs$nutrient)
+nutrient_labels <- paste0("+ ", nutrient_labels[!duplicated(names(nutrient_labels))])
+nutrient_labels[14] <- "Baseline"
+
+conc_labels <- c(pk = "P-K (mmol/l)", fppi = "fP-Pi (mmol/l)", palb = "P-Alb (mmol/l)")
+
+ggplot(cumulative_concs) +
+   geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = FALSE) +
+   geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = person_id), linewidth=0.3, show.legend = FALSE) +
+   geom_path(data=cumulative_concs[cumulative_concs$person_id == 6,], aes(x = predicted_concentration, y = nutrient, group = person_id), color = "black", linewidth=0.3, show.legend = FALSE) +
+   geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
+   geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
+   facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+   scale_y_discrete(labels = nutrient_labels) + 
+   theme_bw() +
+   labs(x = element_blank(), y = element_blank(), color="Subject") 
+ 
+```
+
