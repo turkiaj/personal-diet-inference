@@ -512,7 +512,11 @@ for (graph_person_id in 1:37) {
       {
          l3 <- 1
          l5 <- 1.0
-      } 
+      } else if (graph_person_id == 6)
+      {
+         l3 <- 27
+         l5 <- 2
+      }
 
       intake_model <- mebn.Query(reaction_graph = personal_graph,
                                graph_dir = personal_model_dir,
@@ -532,9 +536,9 @@ for (graph_person_id in 1:37) {
                                    verbose = 1,
                                    l1 = 8,
                                    l2 = 15,
-                                   l3 = 30,
+                                   l3 = l3,
                                    l4 = 30,
-                                   l5 = 2,
+                                   l5 = l5,
                                    l6 = 10)
       
       # Extract all the samples and correlate concentrations and intake with proposal ids

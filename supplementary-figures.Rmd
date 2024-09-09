@@ -149,16 +149,16 @@ ggplot(data) +
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=mu1, alpha = .2) + 
     annotate("rect",ymin=-Inf, ymax=Inf, xmin=mu2+shift, xmax=Inf, alpha = .2) + 
     geom_vline(xintercept = mu1, linetype="dashed", color = "black", linewidth=0.3) +
-    geom_line(aes(x = x, y = inv_logit_values1), color = "blue", linewidth = 0.5) + 
+    geom_line(aes(x = x, y = inv_logit_values1), color = "blue", linewidth = 0.9) + 
     geom_vline(xintercept = mu2 + shift, linetype="dashed", color = "black", linewidth=0.3) +
-    geom_line(aes(x = x, y = inv_logit_values2), color = "red", linewidth = 0.5) + 
+    geom_line(aes(x = x, y = inv_logit_values2), color = "red", linewidth = 0.9) + 
     theme_classic() +
   scale_x_continuous(limits = c(0, x_max))
 
 ```
 
 
-```{r fig.height=3, fig.width=10}
+```{r fig.height=4, fig.width=12}
 library(ggplot2)
 library(gridExtra)
   
@@ -249,7 +249,7 @@ conc_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, ncol=3, padding=0,
 ```
 
 ```{r}
-
+recommendation_with_concpreds_and_current.df
 ```
 
 
@@ -293,7 +293,35 @@ graph_person_id <- match(subject_code, levels(dialysis$potilas))
 accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
 
 datadesc <- dialysis_datadesc
-nutrient <- "fosfori"
+nutrient <- "suola"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=kalium, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$kalium, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_kalium, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Salt (mg/d)", y = paste0("\nlog-prob.")) 
+  
+```
+
+
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_code <- 1581
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_code,]
+graph_person_id <- match(subject_code, levels(dialysis$potilas))
+    
+accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- dialysis_datadesc
+nutrient <- "vesi"
 
 ggplot(accepted_intake.df) +
   geom_point(aes(y=lp, x=fosfori, color=preference), show.legend=TRUE) +
@@ -349,7 +377,7 @@ graph_person_id <- match(subject_code, levels(dialysis$potilas))
 accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
 
 datadesc <- dialysis_datadesc
-nutrient <- "hhepros"
+nutrient <- "dvit"
 
 ggplot(accepted_intake.df) +
   geom_point(aes(y=lp, x=hhepros, color=preference), show.legend=TRUE) +
@@ -422,7 +450,36 @@ ggplot(accepted_intake.df) +
 ```
 
 
-```{r diet_strategies_plot, fig.width=7}
+```{r}
+library(ggplot2)
+
+recommendation_with_concpreds_and_current.df <- readRDS("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
+
+subject_id <- 105
+subject_code <- "S105"
+
+p <- recommendation_with_concpreds_and_current.df[recommendation_with_concpreds_and_current.df$subject_code==subject_id,]
+graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
+
+accepted_intake.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
+
+datadesc <- sysdimet_datadesc
+nutrient <- "cvit"
+
+ggplot(accepted_intake.df) +
+  geom_point(aes(y=lp, x=cvit, color=preference), show.legend=TRUE) +
+  geom_vline(xintercept = p$cvit, linetype="solid", color = "black", linewidth=0.4) +
+  geom_vline(xintercept = p$current_cvit, linetype="dashed", color = "black", linewidth=0.4) +
+  theme_bw() +
+  theme(panel.grid.minor = element_blank()) +
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=as.numeric(datadesc[datadesc$Name==nutrient,]$Lowerbound), alpha = .2) + 
+  annotate("rect",ymin=-Inf, ymax=Inf, xmin=as.numeric(datadesc[datadesc$Name==nutrient,]$Upperbound), xmax=Inf, alpha = .2) + 
+  labs(x = "Vit. C (g/d)", y = paste0("\nlog-prob.")) 
+  
+```
+
+
+```{r diet_strategies_plot, fig.width=9.5}
 library(dplyr)
 library(ggplot2)
 
@@ -496,16 +553,23 @@ nutrient_labels[14] <- "Baseline"
 
 conc_labels <- c(pk = "P-K (mmol/l)", fppi = "fP-Pi (mmol/l)", palb = "P-Alb (mmol/l)")
 
+# Ensure 'concentration' is a factor with levels matching the names in the desired order of conc_labels
+cumulative_concs$concentration <- factor(cumulative_concs$concentration, levels = c("pk", "fppi", "palb"))
+
+# Also ensure limit_data uses the same levels if it's relevant to the facetting
+limit_data$concentration <- factor(limit_data$concentration, levels = c("pk", "fppi", "palb"))
+
+# Now apply ggplot with the proper labeller and facet order
 ggplot(cumulative_concs) +
    geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = FALSE) +
-   geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = person_id), linewidth=0.3, show.legend = FALSE) +
-   geom_path(data=cumulative_concs[cumulative_concs$person_id == 6,], aes(x = predicted_concentration, y = nutrient, group = person_id), color = "black", linewidth=0.3, show.legend = FALSE) +
+   geom_path(aes(x = predicted_concentration, y = nutrient, group = person_id, color = person_id), linewidth = 0.5, show.legend = FALSE) +
+   geom_path(data = cumulative_concs[cumulative_concs$person_id == 6, ], aes(x = predicted_concentration, y = nutrient, group = person_id), color = "black", linewidth = 0.5, show.legend = FALSE) +
    geom_vline(data = limit_data, aes(xintercept = upper_limits), linetype = "dashed", color = "#444444") +
    geom_vline(data = limit_data, aes(xintercept = lower_limits), linetype = "dashed", color = "#444444") +
-   facet_wrap(~concentration,scales = "free_x", labeller = labeller(concentration = conc_labels)) +
+   facet_wrap(~concentration, scales = "free_x", labeller = labeller(concentration = conc_labels)) +
    scale_y_discrete(labels = nutrient_labels) + 
    theme_bw() +
-   labs(x = element_blank(), y = element_blank(), color="Subject") 
- 
+   labs(x = element_blank(), y = element_blank(), color = "Subject")
+
 ```
 
