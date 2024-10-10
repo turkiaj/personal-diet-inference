@@ -33,7 +33,7 @@ functions {
 }
 
 data {
-    int<lower=1> responses;              // Total number of individual responses
+    int<lower=1> responses;              // Total number of responses (concentrations)
     int<lower=1> p;                      // Number of predictors
     int<lower=0> r;                      // Number of nutrients considered
     row_vector[r] proposal_lowerlimits;  // Lower intake limits for each nutrien
@@ -50,8 +50,8 @@ data {
     row_vector[p] X_evidence_point;
     
     // Inference hyperparameters
-    real bound_steepness;                // l1: Steepness parameter for individual soft bounds
-    real bound_requirement;              // l2: Requirement for meeting all bounds
+    real limit_steepness;                // l1: Steepness parameter for individual soft bounds
+    real limit_requirement;              // l2: Requirement for meeting all bounds
     real preference_strength;            // l3: Weighting for preference in the model
     real transition_steepness;           // l4: Steepness for the transition between model components
     real penalty_rate;                   // l5: Rate at which preference errors are penalized
@@ -92,10 +92,10 @@ transformed parameters {
 
   real Y_mu[responses];             // Expected concentration levels for proposed diets
   real Y_mu_Q0[responses] = mu_q0;  // Concentration level when only the fixed factors are considered and all of Q are 0
-  real Y_bound[responses*2];        // Sigmoid values indicating when concentration limits are met
-  real softbound_sum = 0;           // Sum of sigmoid values, with a maximum of 2*responses
+  real Y_limit[responses*2];        // Sigmoid values indicating when concentration limits are met
+  real softlimit_sum = 0;           // Sum of sigmoid values, with a maximum of 2*responses
 
-  real in_concentration_range_lpdf; // Log probability of meeting all concentration limits
+  real within_limits_lpdf;          // Log probability of meeting all concentration limits
   real preference_lpdf;             // Log probability of adherence to personal dietary preferences
   real preference_error_sum = 0;    // Sum of dietary preference errors
   real in_range;                    // Indicates whether all concentration limits have been met
@@ -104,34 +104,32 @@ transformed parameters {
   
   // Computes expected values and adherence to concentration limits for each response
   for (m in 1:responses) {
-    // Normalized nutrient contributions to concentrations
+    // Expected concentrations for diet proposal Q
     Q_contributions[m] = Q_beta_point[m] .* Q;
     Y_mu[m] = mu_q0[m] + sum(Q_contributions[m]);
   
-    // Calculates sigmoid values for concentration bounds
-    Y_bound[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * bound_steepness);
-    Y_bound[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * bound_steepness);
-    softbound_sum += Y_bound[2*m-1] + Y_bound[2*m];
+    // Sigmoid values for the expected concentrations relative to the limits
+    Y_limit[2*m-1] = inv_logit((Y_mu[m] - Y_lower_limits[m]) * limit_steepness);
+    Y_limit[2*m] = inv_logit((Y_upper_limits[m] - Y_mu[m]) * limit_steepness);
+    softlimit_sum += Y_limit[2*m-1] + Y_limit[2*m];
   }
 
-  // Log probabilities for concentration and preference components
-  in_concentration_range_lpdf = normal_lpdf(softbound_sum | 2*responses, 1/bound_requirement);
+  // Log probabilities of mixture distribution components
+  within_limits_lpdf = normal_lpdf(softlimit_sum | 2*responses, 1/limit_requirement);
 
   preference_error_sum = preference_error(Q, current_Q, Q_beta_point, r, responses, penalty_rate);
   preference_lpdf = exponential_lpdf(preference_error_sum | personal_preference_strength);
 
   // Sigmoid coefficient for transitioning between model components
   // - subtracting the constant 0.1 adjusts the sigmoid to reach maximum when all limits are met  
-  in_range = inv_logit((softbound_sum - (2*responses - 0.1)) * transition_steepness);
-  
-  if (verbose == 1) {
-    //print(preference_error_sum);
-  }
+  in_range = inv_logit((softlimit_sum - (2*responses - 0.1)) * transition_steepness);
 }
 
 model {
   
-  // PRIORS: Mixture distribution prior for nutrient proposals, with adjustable favor of general recommendations within the specified range
+  // PRIORS: The inferred nutrients are given healthy prior limits from the general recommendations, 
+  // with a mixture distribution adjusting the preference of the generally recommended intake
+  
   for (i in 1:r) {
     real pref_sigma = (proposal_upperlimits[i] - proposal_lowerlimits[i]) / general_recommendation_prior;
     target += log_mix(0.5,
@@ -139,7 +137,7 @@ model {
                     normal_lpdf(Q[i] | general_RI[i], pref_sigma));
   }
   
-  // POSTERIOR: Mixture model that first aims to reach the concentration targets and then follows the diet preference
-  target += log((1-in_range) * exp(in_concentration_range_lpdf));
+  // LIKEHOOD: Mixture model that first aims to reach the concentration targets and then follows the diet preference
+  target += log((1-in_range) * exp(within_limits_lpdf));
   target += log(in_range * exp(preference_lpdf));
 }

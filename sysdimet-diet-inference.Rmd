@@ -376,9 +376,6 @@ kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
 for (person_id in 1:length(kontrolli)) {
 
-# 104 / 3 -- c vit korkealla ja myös insu ja gluc.. siksikö? joo
-# personal_cvit_fpgluk = -0.02382
-
 #for (person_id in 3:3) {
   
   subject_code <- kontrolli[person_id]
@@ -431,8 +428,8 @@ for (person_id in 1:length(kontrolli)) {
                                posterior_samples = 500,
                                repeat_only = 0,
                                verbose = 1,
-                               l1 = 8,      # bound_steepness: Steepness parameter for individual soft bounds
-                               l2 = 15,     # bound_requirement: Requirement for meeting all bounds
+                               l1 = 8,      # limit_steepness: Steepness parameter for individual soft bounds
+                               l2 = 15,     # limit_requirement: Requirement for meeting all bounds
                                l3 = l3,     # preference_strength: Weighting for preference in the model
                                l4 = 30,     # transition_steepness: Steepness for the transition between model components
                                l5 = l5,     # penalty_rate: Rate at which preference errors are penalized

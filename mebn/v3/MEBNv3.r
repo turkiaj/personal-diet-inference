@@ -3877,8 +3877,8 @@ mebn.Query <- function(reaction_graph, graph_dir, query, queried_nodes, proposal
                      Q_beta_point <- Q_beta_point
                      linear_transformation <- offset_value
                      
-                     bound_steepness <- l1
-                     bound_requirement <- l2
+                     limit_steepness <- l1
+                     limit_requirement <- l2
                      preference_strength <- l3
                      transition_steepness <- l4
                      penalty_rate <- l5
