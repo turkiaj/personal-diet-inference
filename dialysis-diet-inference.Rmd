@@ -301,13 +301,64 @@ c(min(eff),mean(eff),max(eff))
 rhat <- na.omit(pe_summary$summary[,10])
 c(min(rhat),mean(rhat),max(rhat))
 
-
 mcmc_trace(target_blmm1, pars = c("beta[1,1]"))
 mcmc_trace(target_blmm, pars = c("beta[1,2]"))
 
 
 ```
 
+```{r rmse}
+library(rstan)
+
+target_blmm <- mebn.get_localfit("pk_fppi_palb", "models/dialysis/BLMM_gamma_mv_cross/two_levels/")
+
+params <- rstan::extract(target_blmm, pars="Y_rep")
+patients <- levels(dialysis$potilas)
+obs <- nrow(dialysis)
+
+NRMSE <- NULL
+
+for (i in 1:obs)
+{
+  subject_nrmse <- NULL
+
+  for (target in 1:nrow(dialysis_targets))
+  {
+    rep_response <- params$Y_rep[,target,i]
+    
+    target_name <- dialysis_targets[target,]$Name
+
+    # true value for observation
+    true_response <- dialysis[i,][target_name]
+
+    # Expected value of repeated concentration is compared to the true concentration observation
+    
+    conc_NRMSE <- abs(mean(rep_response) - mean(true_response[1,]))/mean(true_response[1,])
+    
+    if (is.null(subject_nrmse)) {
+      subject_nrmse <- conc_NRMSE
+    } 
+    else
+    {
+      subject_nrmse <- cbind(subject_nrmse, conc_NRMSE)
+    }
+  }
+  
+  if (is.null(NRMSE)) {
+    NRMSE <- subject_nrmse
+  } 
+  else
+  {
+    NRMSE <- rbind(NRMSE, subject_nrmse)
+  }
+  
+}
+
+colnames(NRMSE) <- dialysis_targets$Name
+NRMSE_means <- colMeans(NRMSE)
+NRMSE_means
+
+```
 
 ```{r dialysis_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where three concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
 source("mebn/v3/MEBNv3.r")

@@ -193,6 +193,81 @@ c(min(rhat),mean(rhat),max(rhat)) # 0.9990149 1.0000900 1.0125630
 
 ```
 
+```{r}
+get_rep_response_for_all <- function(localfit_directory) {
+  
+  rep_response <- NULL
+  
+  for (targetname in sysdimet_targets$Name)
+  {
+    target_blmm <- mebn.get_localfit(targetname, localfit_directory)
+    ms <- rstan::summary(target_blmm, pars=c("Y_rep"), probs=c(0.10, 0.90), na.rm = TRUE)
+    
+    if (is.null(rep_response))
+      rep_response <- as.vector(ms$summary[,c(1)])
+    else
+      rep_response <- rbind(rep_response, as.vector(ms$summary[,c(1)]))
+  }
+  
+  rownames(rep_response) <- as.vector(sysdimet_targets$Name)
+  
+  return(rep_response)
+}
+```
+
+```{r rmse}
+library(rstan)
+
+target_blmm <- mebn.get_localfit("fshdl_fsldl_fsins_fskol_fpgluk", "models/sysdimet/BLMM_gamma_qr_mv/")
+
+params <- rstan::extract(target_blmm, pars="Y_rep")
+patients <- levels(sysdimet$SUBJECT_ID)
+obs <- nrow(sysdimet)
+
+NRMSE <- NULL
+
+for (i in 1:obs)
+{
+  subject_nrmse <- NULL
+
+  for (target in 1:nrow(sysdimet_targets))
+  {
+    rep_response <- params$Y_rep[,target,i]
+    
+    target_name <- sysdimet_targets[target,]$Name
+
+    # true value for observation
+    true_response <- sysdimet[i,][target_name]
+
+    # Expected value of repeated concentration is compared to the true concentration observation
+    
+    conc_NRMSE <- abs(mean(rep_response) - mean(true_response[1,]))/mean(true_response[1,])
+    
+    if (is.null(subject_nrmse)) {
+      subject_nrmse <- conc_NRMSE
+    } 
+    else
+    {
+      subject_nrmse <- cbind(subject_nrmse, conc_NRMSE)
+    }
+  }
+  
+  if (is.null(NRMSE)) {
+    NRMSE <- subject_nrmse
+  } 
+  else
+  {
+    NRMSE <- rbind(NRMSE, subject_nrmse)
+  }
+  
+}
+
+colnames(NRMSE) <- sysdimet_targets$Name
+NRMSE_means <- colMeans(NRMSE)
+NRMSE_means
+
+```
+
 
 ```{r sysdimet_gamma_mv_cross_2levels_ppc, echo=FALSE, message=FALSE, warning=FALSE, eval=TRUE, cache=TRUE, fig.cap="Posterior predictive check of the model where the concentrations and their parameters are stacked into one univariate model for estimating cross-model correlations."}
 
@@ -374,9 +449,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-for (person_id in 1:length(kontrolli)) {
+#for (person_id in 1:length(kontrolli)) {
 
-#for (person_id in 3:3) {
+for (person_id in 3:3) {
   
   subject_code <- kontrolli[person_id]
 
