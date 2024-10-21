@@ -449,9 +449,9 @@ colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(q
 
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
-#for (person_id in 1:length(kontrolli)) {
+for (person_id in 1:length(kontrolli)) {
 
-for (person_id in 3:3) {
+#for (person_id in 3:3) {
   
   subject_code <- kontrolli[person_id]
 
@@ -471,6 +471,12 @@ for (person_id in 3:3) {
       personal_model_dir <- paste0(graph_dir,graph_person_id)
       personal_graph <- read.graph(paste0(personal_model_dir, "/personal_graph.graphml"), "graphml")
       
+      
+      # This does not work with any hyperparameters
+      # [1] "Simulating person_id 10"
+      # [1] "Simulating graph_person_id 28"
+      # [1] "Simulating subject_code S121"
+
       # Sample diet proposals and matching concentration predictions
       
       l3 <- 40
@@ -520,8 +526,8 @@ for (person_id in 3:3) {
       intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
       intake_proposals.df$lp <- result$lp__
       intake_proposals.df$preference <- result$preference_lpdf
-      intake_proposals.df$in_concentration_range <- result$in_concentration_range_lpdf
-      intake_proposals.df$boundsum <- result$softbound_sum
+      intake_proposals.df$within_limits_lpdf <- result$within_limits_lpdf
+      intake_proposals.df$limitsum <- result$softlimit_sum
       intake_proposals.df$in_range <- result$in_range
 
       contributions.df <- data.frame()
@@ -549,13 +555,13 @@ for (person_id in 3:3) {
         intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
       }
       
-      colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "in_concentration_range", "boundsum", "in_range", assumedtargets$Name, queried_nodes)
+      colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "within_limits_lpdf", "limitsum", "in_range", assumedtargets$Name, queried_nodes)
       
       saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
       
       # Filter recommendation distributions
       recommendation_intake.df <- intake_proposals.df %>%
-        filter(boundsum >= 2 * nrow(assumedtargets) - 0.5) %>%
+        filter(limitsum >= 2 * nrow(assumedtargets) - 0.5) %>%
         as.data.frame()
     
       saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
@@ -580,8 +586,8 @@ for (person_id in 3:3) {
                                mean(recommendation_intake.df$fsins),
                                mean(recommendation_intake.df$fskol),
                                mean(recommendation_intake.df$fpgluk),
-                               apply(result$Y_bound[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
-                               apply(result$Y_bound[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
+                               apply(result$Y_limit[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
+                               apply(result$Y_limit[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
                                )
       } 
       else
@@ -595,8 +601,8 @@ for (person_id in 3:3) {
                               mean(intake_proposals.df$fsins),
                               mean(intake_proposals.df$fskol),
                               mean(intake_proposals.df$fpgluk),
-                              apply(result$Y_bound[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
-                              apply(result$Y_bound[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
+                              apply(result$Y_limit[,seq(1, nrow(assumedtargets))], MARGIN=c(2), max),
+                              apply(result$Y_limit[,2*seq(1, nrow(assumedtargets))], MARGIN=c(2), max)
                               )
       }
     
@@ -1146,15 +1152,14 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 #sysdimet_lp_article_plot
 
-```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=6, fig.keep='last'}
+```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=10, fig.keep='last'}
 
 # Only patients with non-optimal concentrations are included in the recommendation
 
 subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
-sysdimet_lp_plots(subjects_with_failed_concs[1:10,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
-#sysdimet_lp_plots(subjects_with_failed_concs$subject_code, "figures/sysdimet_fixed_concentrations_all.pdf")
-
+#sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
+sysdimet_lp_plots(subjects_with_failed_concs[6:16,]$subject_code, "figures/sysdimet_fixed_concentrations_rest.pdf")
 ```
 
 # Intake recommendation
@@ -1472,8 +1477,8 @@ simulation <- "X50_B50_A50_I50"
 subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
 cumulative_concs$example <- cumulative_concs$subject_id %in%subjects_with_failed_concs[1:5,]$subject_code 
-cumulative_concs$highlight_alpha <- ifelse(cumulative_concs$example, 1, 0.5)
-cumulative_concs$highlight_width <- ifelse(cumulative_concs$example, 1.0, 0.5)
+cumulative_concs$highlight_alpha <- ifelse(cumulative_concs$example, 0.9, 0.8)
+cumulative_concs$highlight_width <- ifelse(cumulative_concs$example, 0.7, 0.65)
 
 p <- ggplot(cumulative_concs) +
    geom_point(aes(x = predicted_concentration, y = nutrient, color = subject_id, alpha = highlight_alpha), size = 0.7, show.legend = FALSE) +

@@ -599,7 +599,7 @@ for (graph_person_id in 1:37) {
       intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
       intake_proposals.df$lp <- result$lp__
       intake_proposals.df$preference <- result$preference_lpdf
-      intake_proposals.df$boundsum <- result$softbound_sum
+      intake_proposals.df$limitsum <- result$softlimit_sum
       
       contributions.df <- data.frame()
 
@@ -626,13 +626,13 @@ for (graph_person_id in 1:37) {
         intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
       }
       
-      colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "boundsum", assumedtargets$Name, queried_nodes)
+      colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "limitsum", assumedtargets$Name, queried_nodes)
       
       saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
     
       # Filter recommendation distributions
       recommendation_intake.df <- intake_proposals.df %>%
-        filter(boundsum >= 2 * nrow(assumedtargets) - 0.5) %>%
+        filter(limitsum >= 2 * nrow(assumedtargets) - 0.5) %>%
         as.data.frame()
     
       saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
@@ -655,8 +655,8 @@ for (graph_person_id in 1:37) {
                                mean(recommendation_intake.df$pk),
                                mean(recommendation_intake.df$fppi),
                                mean(recommendation_intake.df$palb),
-                               colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
-                               colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                               colMeans(result$Y_limit[,seq(1, nrow(assumedtargets))]),
+                               colMeans(result$Y_limit[,2*seq(1, nrow(assumedtargets))])
                                )
       } 
       else
@@ -668,8 +668,8 @@ for (graph_person_id in 1:37) {
                               mean(recommendation_intake.df$pk),
                               mean(recommendation_intake.df$fppi),
                               mean(recommendation_intake.df$palb),
-                              colMeans(result$Y_bound[,seq(1, nrow(assumedtargets))]),
-                              colMeans(result$Y_bound[,2*seq(1, nrow(assumedtargets))])
+                              colMeans(result$Y_limit[,seq(1, nrow(assumedtargets))]),
+                              colMeans(result$Y_limit[,2*seq(1, nrow(assumedtargets))])
                               )
       }
     

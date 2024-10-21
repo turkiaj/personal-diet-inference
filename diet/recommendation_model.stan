@@ -65,12 +65,13 @@ transformed data {
   // Calculate personal maximum preference error by combining the current diet to lower and upper intake limits  
   real max_personal_preference_error = preference_error(current_Q, append_col(proposal_lowerlimits, proposal_upperlimits), Q_beta_point, r, responses, penalty_rate);
   
-  real lambda_k = -lambert_w0(-machine_precision()*max_personal_preference_error) / max_personal_preference_error;
+  real lambda_k_min = -lambert_w0(-machine_precision()*max_personal_preference_error) / max_personal_preference_error;
 
-  real personal_preference_strength = lambda_k + pow(preference_strength, penalty_rate) / max_personal_preference_error;
+  // Scaling with max_personal_preference_error make preference_strength ignorant of nutrient and constraint number
+  real personal_preference_strength = lambda_k_min + preference_strength / max_personal_preference_error;
 
-  if (verbose == 1) {
-    print("lambda_k: ", lambda_k);
+  if (verbose > 0) {
+    print("lambda_k_min: ", lambda_k_min);
     print("max_personal_preference_error: ", max_personal_preference_error);
     print("personal_preference_strength: ", personal_preference_strength);
   }
@@ -123,6 +124,11 @@ transformed parameters {
   // Sigmoid coefficient for transitioning between model components
   // - subtracting the constant 0.1 adjusts the sigmoid to reach maximum when all limits are met  
   in_range = inv_logit((softlimit_sum - (2*responses - 0.1)) * transition_steepness);
+  
+  if (verbose > 1) {
+    print("preference_lpdf: ", preference_lpdf);
+  }
+  
 }
 
 model {
