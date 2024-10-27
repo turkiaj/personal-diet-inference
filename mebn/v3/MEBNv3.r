@@ -175,6 +175,56 @@ mebn.get_personal_dialysis_guidelines <- function(personal_info,patient_in_dialy
     
   return(personal_limits)
 }
+
+##################################################
+
+mebn.GetBeta <- function(reaction_graph, graph_dir, target_id, predictor_id, beta_point_est)
+{
+  library(igraph)
+  
+  predictor_nodes <- V(reaction_graph)[type == 100]
+  target_nodes <- V(reaction_graph)[type == 200]
+  
+  predictors <- length(predictor_nodes)
+  targets <- length(target_nodes)
+  
+  # Collect model parameters from the graph
+  chains <- 4
+  density_chain_samples <- 2000
+  density_samples <- density_chain_samples * chains  # sampling stored in RDS for all the chains (4*1000)
+  
+  # get edge connection from predictor to target
+  beta_edge_id <- reaction_graph[from = predictor_nodes[predictor_id], to = target_nodes[target_id], edges=TRUE]
+  
+  path <- paste0(graph_dir, "/", E(reaction_graph)[beta_edge_id]$distribution)
+  #print(path)
+  
+  edge_beta_distribution <- readRDS(path)
+  
+  # point estimates
+  if (beta_point_est == "median")
+  {
+    beta_point <- median(edge_beta_distribution)   
+  } 
+  else if (beta_point_est == "mean")
+  {
+    beta_point <- mean(edge_beta_distribution)   
+  } 
+  else if (beta_point_est == "mode")
+  {
+    beta_point <- mebn.get_mode(edge_beta_distribution)   
+  } 
+  else if (beta_point_est == "CI5")
+  {
+    beta_point <- quantile(edge_beta_distribution, probs=0.05)   
+  } 
+  else if (beta_point_est == "CI95")
+  {
+    beta_point <- quantile(edge_beta_distribution, probs=0.95)   
+  } 
+  
+  return(beta_point)
+}
   
 ##################################################
 

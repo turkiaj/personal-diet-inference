@@ -479,26 +479,7 @@ for (graph_person_id in 1:37) {
 
 ```
 
-```{r}
-library(gsl)
-
-max_personal_preference_error <- 674383
-
-personal_preference_strength: 0.148064
-
-e <- 0.0001
-
-lambda_k <- -lambert_W0(-e/max_personal_preference_error) / max_personal_preference_error
-
-lambda_k
-
-lambda_k + 1 / (max_personal_preference_error / 100)
-
-```
-
-
-
-```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
+```{r recommendation_with_custom_utility_org_scale, eval=FALSE,echo=FALSE, message=FALSE}
 source("mebn/v3/MEBNv3.r")
 library(igraph) 
 library(dplyr)
@@ -536,7 +517,8 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-for (graph_person_id in 1:37) {
+#for (graph_person_id in 1:37) {
+for (graph_person_id in 2:2) {
 
   subject_code <- levels(dialysis$potilas)[graph_person_id]
   treatment <- unique(dialysis[dialysis$potilas == subject_code,]$hoitomuoto)
@@ -604,38 +586,78 @@ for (graph_person_id in 1:37) {
       contributions.df <- data.frame()
 
       # Add expected values of concentrations
-      for (node_index in 1:nrow(assumedtargets)) {
-        node_name <- assumedtargets[node_index,]$Name
-        conc_mu_distribution <- result$Y_mu[,node_index]
+      for (target_index in 1:nrow(assumedtargets)) {
+        target_name <- assumedtargets[target_index,]$Name
+        conc_mu_distribution <- result$Y_mu[,target_index]
         intake_proposals.df <- cbind(intake_proposals.df, conc_mu_distribution)
 
         # Extract and store contributions of nutrients on concentrations
         temp.df <- data.frame(queried_nodes)
-        temp.df$concentration <- node_name
-        temp.df$contributions <- colMeans(result$Q_contributions[,node_index,])
-        temp.df <- rbind(temp.df, c("base", node_name, head(result$Y_mu_Q0[,node_index],1)))
+        temp.df$concentration <- target_name
+
+        # Transform personal nutrient effects and their concentration contribution into original scale for reporting
+        contributions_org <- c()
+        contributions_org_lCI <- c()
+        contributions_org_uCI <- c()
+        
+        for (nutrient_index in 1:length(queried_nodes)) {
+          
+          nutrient_name <- queried_nodes[[nutrient_index]]
+          effect_name <- paste0("personal_", queried_nodes[nutrient_index], "_", target_name)
+          
+          personal_beta_norm <- V(personal_graph)[effect_name]$value
+          personal_beta_norm_lCI <- V(personal_graph)[effect_name]$value_lCI
+          personal_beta_norm_uCI <- V(personal_graph)[effect_name]$value_uCI
+
+          personal_beta_org <- personal_beta_norm / org_stats$sd[nutrient_index]
+          personal_beta_org_lCI <- personal_beta_norm_lCI / org_stats$sd[nutrient_index]
+          personal_beta_org_uCI <- personal_beta_norm_uCI / org_stats$sd[nutrient_index]
+  
+          baseline_adj <- -(personal_beta_norm * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+          baseline_adj_lCI <- -(personal_beta_norm_lCI * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+          baseline_adj_uCI <- -(personal_beta_norm_uCI * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+  
+          Q_proposal <- result$Q[,nutrient_index] * org_stats[org_stats$name == nutrient_name,]$sd + org_stats[org_stats$name == nutrient_name,]$mean
+          intake_org <- mean(Q_proposal)
+    
+          contribution_org <- personal_beta_org * intake_org + baseline_adj
+          contribution_org_lCI <- personal_beta_org_lCI * intake_org + baseline_adj_lCI
+          contribution_org_uCI <- personal_beta_org_uCI * intake_org + baseline_adj_uCI
+
+          contributions_org <- c(contributions_org, contribution_org)      
+          contributions_org_lCI <- c(contributions_org_lCI, contribution_org_lCI)      
+          contributions_org_uCI <- c(contributions_org_uCI, contribution_org_uCI)      
+        }
+        
+        temp.df$contributions <- contributions_org
+        temp.df$contributions_lCI <- contributions_org_lCI
+        temp.df$contributions_uCI <- contributions_org_uCI
+        
+        baselevel <- head(result$Y_mu_Q0[,target_index],1)
+        temp.df <- rbind(temp.df, c("base", target_name, baselevel, baselevel, baselevel))
+
         contributions.df <- rbind(contributions.df, temp.df)
       }
-      
-      saveRDS(contributions.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/contributions_",graph_person_id,".rds"))
+
+      #saveRDS(contributions.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/contributions_",graph_person_id,".rds"))
  
       # Add related intake proposals
-      for (node_index in 1:length(queried_nodes)) {
-        node_name <- queried_nodes[[node_index]]
-        Q_proposal <- result$Q[,node_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
+      for (nutrient_index in 1:length(queried_nodes)) {
+        node_name <- queried_nodes[[nutrient_index]]
+        Q_proposal <- result$Q[,nutrient_index] * org_stats[org_stats$name == node_name,]$sd + org_stats[org_stats$name == node_name,]$mean
         intake_proposals.df <- cbind(intake_proposals.df, Q_proposal)
       }
       
       colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "limitsum", assumedtargets$Name, queried_nodes)
       
-      saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
+      #saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
     
       # Filter recommendation distributions
       recommendation_intake.df <- intake_proposals.df %>%
         filter(limitsum >= 2 * nrow(assumedtargets) - 0.5) %>%
         as.data.frame()
     
-      saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
+      #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
           
       print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
       
@@ -679,11 +701,12 @@ for (graph_person_id in 1:37) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lowerbound"), paste0(assumedtargets$Name, "_upperbound"))
 
-saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
 # As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
   
 ```
+
 
 ```{r fig.height=6, inference_debug}
 
@@ -718,7 +741,6 @@ lp_plot <- grid.arrange(conc_plot1, conc_plot2, conc_plot3, layout_matrix = lay,
   
 ```
 
-
 ```{r current_levels}
 # Add current levels of intake and concentrations to the data frame
 library(stringr)
@@ -734,7 +756,7 @@ current_diet.df <- data.frame(matrix(ncol = 1 + length(queried_nodes) + nrow(dia
 personal_effects <- data.frame()
 
 for (subject_code in recommendation_with_concpreds.df$subject_code) {
-
+  
   graph_person_id <- match(subject_code, levels(dialysis$potilas))
 
   graph_dir <- paste0("graphs/dialysis/mv3_cross_two_levels/",graph_person_id)
@@ -763,14 +785,16 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
     for (t in dialysis_targets$Name)
     {
       effect_name <- paste0(queried_nodes[i],"_",t)
+      
+      # Graphs hold the normalized effects. Transform these too to original scale for reporting.
+      effect_sd <- org_stats$sd[i]
+      effects_org <-  c(graph_person_id,
+                          effect_name,
+                          nodes[paste0("personal_", effect_name)]$value / effect_sd,
+                          nodes[paste0("personal_", effect_name)]$value_lCI / effect_sd,
+                          nodes[paste0("personal_", effect_name)]$value_uCI / effect_sd)
         
-      effects <-  c(graph_person_id,
-                    effect_name,
-                    nodes[paste0("personal_", effect_name)]$value,
-                    nodes[paste0("personal_", effect_name)]$value_lCI,
-                    nodes[paste0("personal_", effect_name)]$value_uCI)
-        
-      personal_effects <- rbind(personal_effects, effects)
+      personal_effects <- rbind(personal_effects, effects_org)
     }
   }
   
@@ -806,7 +830,6 @@ saveRDS(recommendation_with_concpreds_and_current.df, paste0("patient_summary/di
 
 ```
 
-
 ```{r}
 library(kableExtra) # for HTML and Latex tables
 
@@ -821,9 +844,10 @@ effect_summary <- personal_effects %>%
                 min_personal_uCI = as.numeric(value_uCI[which.min(as.numeric(value))]),
                 max_personal = max(as.numeric(value)),
                 max_personal_lCI = as.numeric(value_lCI[which.max(as.numeric(value))]),
-                max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))])
+                max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))]),
+                total_personal = abs(min_personal) + abs(max_personal)
   ) %>%
-  arrange(desc(abs(effect_avg))) %>%
+  arrange(desc(total_personal)) %>%
   top_n(20)
 
 effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
@@ -848,11 +872,11 @@ colnames(effect_desc.df) <- c("effect", "effect_description", "nutrient", "conce
 
 effect_summary_table.df <- effect_summary_table.df %>% left_join(effect_desc.df, by = "effect")
 
-kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccc",
+kable(effect_summary_table.df[c(6,2:5)], "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccc",
   col.names = c("Effect", "Avg. effect", "Effect sd.", "Min. personal effect", "Max personal effect")) %>%
-  kable_styling(latex_options="scale_down") %>%  
+  kable_styling(latex_options="scale_down") %>%
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) %>%
+  row_spec(0,bold=TRUE) #%>%
   save_kable(file = "tables/dialysis_effects.pdf", keep_tex = TRUE)
 
 ```
@@ -1029,12 +1053,12 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
 ```
 
 #dialysis_lp_article_plot
-```{r dialysis_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=8, fig.height=9, fig.keep='last'}
+```{r dialysis_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=10, fig.keep='last'}
 
 subjects_with_failed_concs <- readRDS("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/recommendation_summary_with_concpreds_and_current.rds")
 
-# plot just 7 of 32 that have failed concs
-dialysis_with_failed_concs <- subjects_with_failed_concs[1:8,]
+# plot just 10 of 32 that have failed concs
+dialysis_with_failed_concs <- subjects_with_failed_concs[1:10,]
 
 dialysis_lp_plots(dialysis_with_failed_concs$subject_code, "figures/dialysis_fixed_concentrations.pdf")
 
@@ -1129,6 +1153,7 @@ library(ggplot2)
 all_contributions.df <- data.frame()
 
 for (person_id in 1:37)
+#for (person_id in 2:2)
 {
   contr_file <- paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/contributions_",person_id,".rds")
   
@@ -1187,22 +1212,11 @@ for (person_id in as.numeric(levels(cumulative_concs$person_id)))
 
 limit_data <- unique(limit_data)
 
-# Include personal diet clustering
-#diet_clusters$person_id <- factor(diet_clusters$person_id)
-#diet_clusters$diet_cluster <- factor(diet_clusters$diet_cluster)
-
-#cumulative_concs <- cumulative_concs %>% left_join(diet_clusters, join_by(person_id))
-
-# annotate("rect",ymin=-Inf, ymax=Inf, xmin=-Inf, xmax=fshdl_recommendations[1], alpha = .2) + 
-# annotate("rect",ymin=-Inf, ymax=Inf, xmin=fshdl_recommendations[2], xmax=Inf, alpha = .2) + 
-
 nutrient_labels <- setNames(cumulative_concs$ShortDescription, cumulative_concs$nutrient)
 nutrient_labels <- paste0("+ ", nutrient_labels[!duplicated(names(nutrient_labels))])
 nutrient_labels[14] <- "Baseline"
 
 conc_labels <- c(pk = "P-K (mmol/l)", fppi = "fP-Pi (mmol/l)", palb = "P-Alb (mmol/l)")
-
-#library("viridis")
 
 p <- ggplot(cumulative_concs) +
    geom_point(aes(x = predicted_concentration, y = nutrient, color = person_id), size = 0.7, show.legend = FALSE) +
@@ -1259,14 +1273,14 @@ strategy_summary.df$nutrient <- strategy_summary.df$ShortDescription
 strategy_summary.df <- strategy_summary.df[order(strategy_summary.df$mean_abs_contribution, decreasing = TRUE),]
 strategy_summary.df <- subset(strategy_summary.df, select = c(1:7))
 
-kable(strategy_summary.df, "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
+kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
   col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
   add_header_above(c(" " = 1, "P-K" = 2, "fP-Pi" = 2, "P-Alb" = 2), escape = F) %>%
   column_spec(1, width = "7em") %>%
   kable_styling(latex_options="scale_down") %>%  
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) #%>%
-  #save_kable(file = "tables/dialysis_diet_strategies.pdf", keep_tex = TRUE)
+  row_spec(0,bold=TRUE) %>%
+  save_kable(file = "tables/dialysis_diet_strategies.pdf", keep_tex = TRUE)
 
 ```
 
@@ -1310,13 +1324,13 @@ strategy_summary.df$nutrient <- strategy_summary.df$ShortDescription
 strategy_summary.df <- strategy_summary.df[order(strategy_summary.df$mean_abs_contribution, decreasing = TRUE),]
 strategy_summary.df <- subset(strategy_summary.df, select = c(1:7))
 
-kable(strategy_summary.df, "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
+kable(strategy_summary.df, "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccccc",
   col.names = c("Nutrient", "Min", "Max", "Min", "Max", "Min", "Max")) %>%
   add_header_above(c(" " = 1, "P-K" = 2, "fP-Pi" = 2, "P-Alb" = 2), escape = F) %>%
   column_spec(1, width = "7em") %>%
   row_spec(0,bold=TRUE) %>%
   kable_styling(latex_options="scale_down") %>%  
-  kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) 
+  kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
   save_kable(file = "tables/dialysis_diet_strategies_percentages.pdf", keep_tex = TRUE)
 
 
