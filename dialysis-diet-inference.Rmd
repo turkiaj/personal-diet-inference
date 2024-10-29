@@ -517,8 +517,7 @@ patient_summary <- data.frame(matrix(ncol = 3 + length(queried_nodes) * 3 + nrow
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lCI"), paste0(assumedtargets$Name, "_uCI"))
 
-#for (graph_person_id in 1:37) {
-for (graph_person_id in 2:2) {
+for (graph_person_id in 1:37) {
 
   subject_code <- levels(dialysis$potilas)[graph_person_id]
   treatment <- unique(dialysis[dialysis$potilas == subject_code,]$hoitomuoto)
@@ -574,73 +573,112 @@ for (graph_person_id in 2:2) {
                                    l5 = l5,
                                    l6 = 10)
       
-      # Extract all the samples and correlate concentrations and intake with proposal ids
+      # Function to calculate baseline-adjusted normalized effects
+      calculate_adjusted_effect <- function(beta_norm, mean_val, sd_val) {
+        baseline_adj_norm <- -(beta_norm * mean_val) / (sd_val^2)
+        beta_adj <- beta_norm + baseline_adj_norm
+        return(list(beta_adj = beta_adj, baseline_adj_norm = baseline_adj_norm))
+      }
+      
+      # Extract all the samples and correlate concentrations and intake with proposal IDs
       result <- rstan::extract(intake_model)
-    
+      
       # Add inference details
-      intake_proposals.df <- data.frame(proposal=1:dim(result$Y_mu)[1])
+      intake_proposals.df <- data.frame(proposal = 1:dim(result$Y_mu)[1])
       intake_proposals.df$lp <- result$lp__
       intake_proposals.df$preference <- result$preference_lpdf
       intake_proposals.df$limitsum <- result$softlimit_sum
       
+      # Data frames for storing baseline-adjusted effects in normalized scale and contributions in original scale
+      effects.df <- data.frame()
       contributions.df <- data.frame()
-
+      
       # Add expected values of concentrations
       for (target_index in 1:nrow(assumedtargets)) {
         target_name <- assumedtargets[target_index,]$Name
-        conc_mu_distribution <- result$Y_mu[,target_index]
+        conc_mu_distribution <- result$Y_mu[, target_index]
         intake_proposals.df <- cbind(intake_proposals.df, conc_mu_distribution)
-
-        # Extract and store contributions of nutrients on concentrations
-        temp.df <- data.frame(queried_nodes)
-        temp.df$concentration <- target_name
-
-        # Transform personal nutrient effects and their concentration contribution into original scale for reporting
+      
+        # Data frames to temporarily store effects and contributions
+        temp_effect.df <- data.frame(queried_nodes)
+        temp_effect.df$concentration <- target_name
+      
+        temp_contr.df <- data.frame(queried_nodes)
+        temp_contr.df$concentration <- target_name
+      
+        # Arrays to store baseline-adjusted effects in normalized scale and contributions in original scale
+        effects_adj <- c()
+        effects_adj_lCI <- c()
+        effects_adj_uCI <- c()
+        
         contributions_org <- c()
         contributions_org_lCI <- c()
         contributions_org_uCI <- c()
         
+        # Loop over each nutrient to calculate baseline-adjusted effects and contributions
         for (nutrient_index in 1:length(queried_nodes)) {
-          
           nutrient_name <- queried_nodes[[nutrient_index]]
-          effect_name <- paste0("personal_", queried_nodes[nutrient_index], "_", target_name)
+          effect_name <- paste0("personal_", nutrient_name, "_", target_name)
+      
+          # Extract personal beta estimates in normalized scale and their CIs
+          beta_values <- c(V(personal_graph)[effect_name]$value, V(personal_graph)[effect_name]$value_lCI, V(personal_graph)[effect_name]$value_uCI)
+          names(beta_values) <- c("beta", "beta_lCI", "beta_uCI")
+      
+          # Calculate adjusted normalized effects for each CI level
+          adjusted_results <- lapply(beta_values, calculate_adjusted_effect, mean_val = org_stats$mean[nutrient_index], sd_val = org_stats$sd[nutrient_index])
           
-          personal_beta_norm <- V(personal_graph)[effect_name]$value
-          personal_beta_norm_lCI <- V(personal_graph)[effect_name]$value_lCI
-          personal_beta_norm_uCI <- V(personal_graph)[effect_name]$value_uCI
-
-          personal_beta_org <- personal_beta_norm / org_stats$sd[nutrient_index]
-          personal_beta_org_lCI <- personal_beta_norm_lCI / org_stats$sd[nutrient_index]
-          personal_beta_org_uCI <- personal_beta_norm_uCI / org_stats$sd[nutrient_index]
-  
-          baseline_adj <- -(personal_beta_norm * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-          baseline_adj_lCI <- -(personal_beta_norm_lCI * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-          baseline_adj_uCI <- -(personal_beta_norm_uCI * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-  
-          Q_proposal <- result$Q[,nutrient_index] * org_stats[org_stats$name == nutrient_name,]$sd + org_stats[org_stats$name == nutrient_name,]$mean
+          # Extract adjusted effects
+          beta_adj <- adjusted_results$beta$beta_adj
+          beta_adj_lCI <- adjusted_results$beta_lCI$beta_adj
+          beta_adj_uCI <- adjusted_results$beta_uCI$beta_adj
+      
+          effects_adj <- c(effects_adj, beta_adj)
+          effects_adj_lCI <- c(effects_adj_lCI, beta_adj_lCI)
+          effects_adj_uCI <- c(effects_adj_uCI, beta_adj_uCI)
+      
+          # Contribution using recommended intake
+          Q_proposal <- result$Q[, nutrient_index] * org_stats$sd[nutrient_index] + org_stats$mean[nutrient_index]
           intake_org <- mean(Q_proposal)
-    
+      
+          personal_beta_org <- beta_values["beta"] / org_stats$sd[nutrient_index]
+          personal_beta_org_lCI <- beta_values["beta_lCI"] / org_stats$sd[nutrient_index]
+          personal_beta_org_uCI <- beta_values["beta_uCI"] / org_stats$sd[nutrient_index]
+      
+          baseline_adj <- -(beta_values["beta"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+          baseline_adj_lCI <- -(beta_values["beta_lCI"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+          baseline_adj_uCI <- -(beta_values["beta_uCI"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
+      
           contribution_org <- personal_beta_org * intake_org + baseline_adj
           contribution_org_lCI <- personal_beta_org_lCI * intake_org + baseline_adj_lCI
           contribution_org_uCI <- personal_beta_org_uCI * intake_org + baseline_adj_uCI
-
-          contributions_org <- c(contributions_org, contribution_org)      
-          contributions_org_lCI <- c(contributions_org_lCI, contribution_org_lCI)      
-          contributions_org_uCI <- c(contributions_org_uCI, contribution_org_uCI)      
+      
+          contributions_org <- c(contributions_org, contribution_org)
+          contributions_org_lCI <- c(contributions_org_lCI, contribution_org_lCI)
+          contributions_org_uCI <- c(contributions_org_uCI, contribution_org_uCI)
         }
+      
+        # Store results for effects
+        temp_effect.df$effects <- effects_adj
+        temp_effect.df$effects_lCI <- effects_adj_lCI
+        temp_effect.df$effects_uCI <- effects_adj_uCI
+        effects.df <- rbind(effects.df, temp_effect.df)
+      
+        # Store results for contributions
+        temp_contr.df$contributions <- contributions_org
+        temp_contr.df$contributions_lCI <- contributions_org_lCI
+        temp_contr.df$contributions_uCI <- contributions_org_uCI
         
-        temp.df$contributions <- contributions_org
-        temp.df$contributions_lCI <- contributions_org_lCI
-        temp.df$contributions_uCI <- contributions_org_uCI
-        
-        baselevel <- head(result$Y_mu_Q0[,target_index],1)
-        temp.df <- rbind(temp.df, c("base", target_name, baselevel, baselevel, baselevel))
-
-        contributions.df <- rbind(contributions.df, temp.df)
+        # Adding the baseline concentration level
+        baselevel <- head(result$Y_mu_Q0[, target_index], 1)
+        temp_contr.df <- rbind(temp_contr.df, c("base", target_name, baselevel, baselevel, baselevel))
+      
+        contributions.df <- rbind(contributions.df, temp_contr.df)
       }
-
-      #saveRDS(contributions.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/contributions_",graph_person_id,".rds"))
- 
+      
+      # Save the results
+      saveRDS(effects.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation", simulation, "/details/effects_", graph_person_id, ".rds"))
+      saveRDS(contributions.df, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation", simulation, "/details/contributions_", graph_person_id, ".rds"))
+      
       # Add related intake proposals
       for (nutrient_index in 1:length(queried_nodes)) {
         node_name <- queried_nodes[[nutrient_index]]
@@ -650,14 +688,14 @@ for (graph_person_id in 2:2) {
       
       colnames(intake_proposals.df) <- c("proposal", "lp", "preference", "limitsum", assumedtargets$Name, queried_nodes)
       
-      #saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
+      saveRDS(intake_proposals.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/accepted_intake_",graph_person_id,".rds"))
     
       # Filter recommendation distributions
       recommendation_intake.df <- intake_proposals.df %>%
         filter(limitsum >= 2 * nrow(assumedtargets) - 0.5) %>%
         as.data.frame()
     
-      #saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
+      saveRDS(recommendation_intake.df %>% as.data.frame(), paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/details/recommendation_intake_",graph_person_id,".rds"))
           
       print(paste0("Number of recommendation sample size ", nrow(recommendation_intake.df)))
       
@@ -701,10 +739,9 @@ for (graph_person_id in 2:2) {
 
 colnames(patient_summary) <- c("person_id", "subject_code", "accepted", paste0(queried_nodes), paste0(queried_nodes, "_lCI"), paste0(queried_nodes, "_uCI"), assumedtargets$Name, paste0(assumedtargets$Name, "_lowerbound"), paste0(assumedtargets$Name, "_upperbound"))
 
-#saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
+saveRDS(patient_summary, paste0("patient_summary/dialysis/mv3_cross_two_levels/simulation",simulation,"/recommendation_summary.rds"))
 
-# As a result, we have proposal distributions of nutrients. Next, we predict concentrations that are produced by expected values of those proposal distributions.
-  
+# As a result, we have proposal distributions of nutrients. Next, 
 ```
 
 
@@ -784,17 +821,21 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
     # collect personal effects statistics
     for (t in dialysis_targets$Name)
     {
-      effect_name <- paste0(queried_nodes[i],"_",t)
-      
-      # Graphs hold the normalized effects. Transform these too to original scale for reporting.
-      effect_sd <- org_stats$sd[i]
-      effects_org <-  c(graph_person_id,
-                          effect_name,
-                          nodes[paste0("personal_", effect_name)]$value / effect_sd,
-                          nodes[paste0("personal_", effect_name)]$value_lCI / effect_sd,
-                          nodes[paste0("personal_", effect_name)]$value_uCI / effect_sd)
+        effects.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/effects_",graph_person_id,".rds"))
+
+        effect_name <- paste0(queried_nodes[i],"_",t)
         
-      personal_effects <- rbind(personal_effects, effects_org)
+        beta_adj <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects
+        beta_adj_lCI <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects_lCI
+        beta_adj_uCI <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects_uCI
+
+        effects_org <-  c(graph_person_id,
+                          effect_name,
+                          beta_adj,
+                          beta_adj_lCI,
+                          beta_adj_uCI)
+
+        personal_effects <- rbind(personal_effects, effects_org)
     }
   }
   
@@ -817,7 +858,6 @@ colnames(personal_effects) <- c("graph_person_id", "effect", "value", "value_lCI
 colnames(current_diet.df) <- c("person_id", paste0("current_", queried_nodes), paste0("current_", dialysis_targets$Name))
 
 # Join recommendations with current situation
-
 recommendation_with_concpreds.df$person_id <- as.integer(recommendation_with_concpreds.df$person_id)
 current_diet.df$person_id <- as.integer(current_diet.df$person_id)
 
@@ -872,11 +912,11 @@ colnames(effect_desc.df) <- c("effect", "effect_description", "nutrient", "conce
 
 effect_summary_table.df <- effect_summary_table.df %>% left_join(effect_desc.df, by = "effect")
 
-kable(effect_summary_table.df[c(6,2:5)], "html", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccc",
+kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.names = FALSE, digits = 2,align="lcccc",
   col.names = c("Effect", "Avg. effect", "Effect sd.", "Min. personal effect", "Max personal effect")) %>%
   kable_styling(latex_options="scale_down") %>%
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) #%>%
+  row_spec(0,bold=TRUE) %>%
   save_kable(file = "tables/dialysis_effects.pdf", keep_tex = TRUE)
 
 ```
@@ -1153,12 +1193,15 @@ library(ggplot2)
 all_contributions.df <- data.frame()
 
 for (person_id in 1:37)
-#for (person_id in 2:2)
 {
   contr_file <- paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/contributions_",person_id,".rds")
-  
+
   if (file.exists(contr_file)) {
     contributions.df <- readRDS(contr_file)
+    
+    # contributions.df file contain also CIs but we visualize now just the expected value
+    contributions.df <- contributions.df[c('queried_nodes','concentration','contributions')]
+    
     all_contributions.df <- rbind(all_contributions.df, cbind(person_id, contributions.df))
   }
 }
