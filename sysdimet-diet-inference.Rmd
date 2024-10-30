@@ -360,25 +360,6 @@ check_failed_concs <- function(graph_person_id, personal_info, recommeded_concen
 kontrolli <- unique(sysdimet[sysdimet$ryhma=='kontrolli',]$SUBJECT_ID)
 
 ```
-```{r}
-for (person_id in 1:length(kontrolli)) {
-
-  subject_code <- kontrolli[person_id]
-
-  # Normal ranges of concentration are personalized
-  #personal_info <- head(sysdimet[sysdimet$SUBJECT_ID == subject_code,],1)
-  #recommeded_concentrations <- mebn.get_personal_sysdimet_guidelines(personal_info)
-  
-  # this person_id of kontrolli is different from the whole sysdimet
-  graph_person_id <- match(subject_code, levels(sysdimet$SUBJECT_ID))
-  
-  print(person_id)
-  print(subject_code)
-  print(graph_person_id)
-  print("-----")
-}
-  
-```
 
 
 ```{r recommendation_with_custom_utility, eval=FALSE,echo=FALSE, message=FALSE}
@@ -492,13 +473,6 @@ for (person_id in 1:length(kontrolli)) {
                                l5 = l5,     # penalty_rate: Rate at which preference errors are penalized
                                l6 = 10)     # general_recommendation_prior: Weight for general recommendation in proposal distributions 
       
-      # Function to calculate baseline-adjusted normalized effects
-      calculate_adjusted_effect <- function(beta_norm, mean_val, sd_val) {
-        baseline_adj_norm <- -(beta_norm * mean_val) / (sd_val^2)
-        beta_adj <- beta_norm + baseline_adj_norm
-        return(list(beta_adj = beta_adj, baseline_adj_norm = baseline_adj_norm))
-      }
-      
       # Extract all the samples and correlate concentrations and intake with proposal IDs
       result <- rstan::extract(intake_model)
       
@@ -510,96 +484,30 @@ for (person_id in 1:length(kontrolli)) {
       intake_proposals.df$limitsum <- result$softlimit_sum
       intake_proposals.df$in_range <- result$in_range
       
-      # Data frames for storing baseline-adjusted effects in normalized scale and contributions in original scale
-      effects.df <- data.frame()
+      # Data frame to store contributions
       contributions.df <- data.frame()
       
       # Add expected values of concentrations
-      for (target_index in 1:nrow(assumedtargets)) {
-        target_name <- assumedtargets[target_index,]$Name
-        conc_mu_distribution <- result$Y_mu[, target_index]
+      for (node_index in 1:nrow(assumedtargets)) {
+        node_name <- assumedtargets[node_index,]$Name
+        conc_mu_distribution <- result$Y_mu[,node_index]
         intake_proposals.df <- cbind(intake_proposals.df, conc_mu_distribution)
-      
-        # Data frames to temporarily store effects and contributions
-        temp_effect.df <- data.frame(queried_nodes)
-        temp_effect.df$concentration <- target_name
-      
-        temp_contr.df <- data.frame(queried_nodes)
-        temp_contr.df$concentration <- target_name
-      
-        # Arrays to store baseline-adjusted effects in normalized scale and contributions in original scale
-        effects_adj <- c()
-        effects_adj_lCI <- c()
-        effects_adj_uCI <- c()
-        
-        contributions_org <- c()
-        contributions_org_lCI <- c()
-        contributions_org_uCI <- c()
-        
-        # Loop over each nutrient to calculate baseline-adjusted effects and contributions
-        for (nutrient_index in 1:length(queried_nodes)) {
-          nutrient_name <- queried_nodes[[nutrient_index]]
-          effect_name <- paste0("personal_", nutrient_name, "_", target_name)
-      
-          # Extract personal beta estimates in normalized scale and their CIs
-          beta_values <- c(V(personal_graph)[effect_name]$value, V(personal_graph)[effect_name]$value_lCI, V(personal_graph)[effect_name]$value_uCI)
-          names(beta_values) <- c("beta", "beta_lCI", "beta_uCI")
-      
-          # Calculate adjusted normalized effects for each CI level
-          adjusted_results <- lapply(beta_values, calculate_adjusted_effect, mean_val = org_stats$mean[nutrient_index], sd_val = org_stats$sd[nutrient_index])
-          
-          # Extract adjusted effects
-          beta_adj <- adjusted_results$beta$beta_adj
-          beta_adj_lCI <- adjusted_results$beta_lCI$beta_adj
-          beta_adj_uCI <- adjusted_results$beta_uCI$beta_adj
-      
-          effects_adj <- c(effects_adj, beta_adj)
-          effects_adj_lCI <- c(effects_adj_lCI, beta_adj_lCI)
-          effects_adj_uCI <- c(effects_adj_uCI, beta_adj_uCI)
-      
-          # Contribution using recommended intake
-          Q_proposal <- result$Q[, nutrient_index] * org_stats$sd[nutrient_index] + org_stats$mean[nutrient_index]
-          intake_org <- mean(Q_proposal)
-      
-          personal_beta_org <- beta_values["beta"] / org_stats$sd[nutrient_index]
-          personal_beta_org_lCI <- beta_values["beta_lCI"] / org_stats$sd[nutrient_index]
-          personal_beta_org_uCI <- beta_values["beta_uCI"] / org_stats$sd[nutrient_index]
-      
-          baseline_adj <- -(beta_values["beta"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-          baseline_adj_lCI <- -(beta_values["beta_lCI"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-          baseline_adj_uCI <- -(beta_values["beta_uCI"] * org_stats$mean[nutrient_index]) / org_stats$sd[nutrient_index]
-      
-          contribution_org <- personal_beta_org * intake_org + baseline_adj
-          contribution_org_lCI <- personal_beta_org_lCI * intake_org + baseline_adj_lCI
-          contribution_org_uCI <- personal_beta_org_uCI * intake_org + baseline_adj_uCI
-      
-          contributions_org <- c(contributions_org, contribution_org)
-          contributions_org_lCI <- c(contributions_org_lCI, contribution_org_lCI)
-          contributions_org_uCI <- c(contributions_org_uCI, contribution_org_uCI)
-        }
-      
-        # Store results for effects
-        temp_effect.df$effects <- effects_adj
-        temp_effect.df$effects_lCI <- effects_adj_lCI
-        temp_effect.df$effects_uCI <- effects_adj_uCI
-        effects.df <- rbind(effects.df, temp_effect.df)
-      
-        # Store results for contributions
-        temp_contr.df$contributions <- contributions_org
-        temp_contr.df$contributions_lCI <- contributions_org_lCI
-        temp_contr.df$contributions_uCI <- contributions_org_uCI
-        
-        # Adding the baseline concentration level
-        baselevel <- head(result$Y_mu_Q0[, target_index], 1)
-        temp_contr.df <- rbind(temp_contr.df, c("base", target_name, baselevel, baselevel, baselevel))
-      
-        contributions.df <- rbind(contributions.df, temp_contr.df)
+
+        # Extract and store contributions of nutrients on concentrations
+        temp.df <- data.frame(queried_nodes)
+        temp.df$concentration <- node_name
+
+	      # We only show the expected values of contributions but whole distribution is available
+        temp.df$contributions <- colMeans(result$Q_contributions[,node_index,])
+
+	      # Baseline of fixed effects is included so that accumulated contributions result the final concentration 
+        temp.df <- rbind(temp.df, c("base", node_name, head(result$Y_mu_Q0[,node_index],1)))
+        contributions.df <- rbind(contributions.df, temp.df)
       }
       
-      # Save the results
-      saveRDS(effects.df, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation", simulation, "/details/effects_", graph_person_id, ".rds"))
+      # Save contributions data
       saveRDS(contributions.df, paste0("patient_summary/sysdimet/gamma_qr_mv/simulation", simulation, "/details/contributions_", graph_person_id, ".rds"))
-    
+      
       # Add related intake proposals
       for (node_index in 1:length(queried_nodes)) {
         node_name <- queried_nodes[[node_index]]
@@ -790,21 +698,15 @@ for (subject_code in recommendation_with_concpreds.df$subject_code) {
     # collect personal effects statistics
     for (t in sysdimet_targets$Name)
     {
-      effects.df <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/details/effects_",graph_person_id,".rds"))
-
       effect_name <- paste0(queried_nodes[i],"_",t)
-      
-      beta_adj <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects
-      beta_adj_lCI <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects_lCI
-      beta_adj_uCI <- effects.df[effects.df$queried_nodes == queried_nodes[i] & effects.df$concentration == t,]$effects_uCI
-
-      effects_org <-  c(graph_person_id,
-                        effect_name,
-                        beta_adj,
-                        beta_adj_lCI,
-                        beta_adj_uCI)
-
-      personal_effects <- rbind(personal_effects, effects_org)
+        
+      effects <-  c(graph_person_id,
+                    effect_name,
+                    nodes[paste0("personal_", effect_name)]$value,
+                    nodes[paste0("personal_", effect_name)]$value_lCI,
+                    nodes[paste0("personal_", effect_name)]$value_uCI)
+        
+      personal_effects <- rbind(personal_effects, effects)
     }
   }
   
@@ -885,8 +787,7 @@ effect_summary <- personal_effects %>%
                 max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))]),
                 total_personal = abs(min_personal) + abs(max_personal)
   ) %>%
-  arrange(desc(total_personal)) %>%
-  top_n(20)
+  arrange(desc(total_personal)) %>% top_n(20)
 
 effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
 
@@ -915,11 +816,11 @@ kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.
   column_spec(1, width = "7em") %>%
   kable_styling(latex_options="scale_down") %>%  
   kable_styling(latex_options = c("basic", "condensed"), full_width = TRUE) %>%
-  row_spec(0,bold=TRUE) %>%
-  save_kable(file = "tables/sysdimet_effects.pdf", keep_tex = TRUE)
+  row_spec(0,bold=TRUE) %>% save_kable(file = "tables/sysdimet_effects.pdf", keep_tex = TRUE)
+
+#effect_summary_table.df[effect_summary_table.df$nutrient == "Sucrose",]
 
 ```
-
 
 #sysdimet_lp_plots
 ```{r sysdimet_lp_plots-function}
@@ -2121,8 +2022,13 @@ p <- ggplot(cumulative_concs) +
 
 
 ```{r}
-cumulative_concs
-intake.df[intake.df$subject_code=="104",]
+library(ggplot2)
+
+ggplot(sysdimet, aes(y=epa, x=fshdl), group = SUBJECT_ID) +
+  geom_point(aes(color=SUBJECT_ID), show.legend = FALSE) +
+  #stat_smooth(method = "lm", col = "red") +
+  theme_bw() 
+```
 ```
 
 
