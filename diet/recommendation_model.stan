@@ -128,7 +128,6 @@ transformed parameters {
   if (verbose > 1) {
     print("preference_lpdf: ", preference_lpdf);
   }
-  
 }
 
 model {
