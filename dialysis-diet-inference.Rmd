@@ -101,7 +101,16 @@ dialysis$potilas <- factor(dialysis$potilas)
 
 # Define how to iterate through the graph
 # - same targets
-dialysis_predictors <- dialysis_datadesc[dialysis_datadesc$Order==100,]
+```
+
+
+```{r data_loading, echo=FALSE, message=FALSE, warning=FALSE}
+dialysis_predictors
+```
+
+
+```{r data_loading, echo=FALSE, message=FALSE, warning=FALSE}
+<- dialysis_datadesc[dialysis_datadesc$Order==100,]
 dialysis_targets <- dialysis_datadesc[dialysis_datadesc$Order==200,]
 
 ```
@@ -809,7 +818,7 @@ effect_summary <- personal_effects %>%
                 total_personal = abs(min_personal) + abs(max_personal)
   ) %>%
   arrange(desc(total_personal)) %>%
-  top_n(20)
+  top_n(100)
 
 effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
 
@@ -840,9 +849,43 @@ kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.
   row_spec(0,bold=TRUE) %>%
   save_kable(file = "tables/dialysis_effects.pdf", keep_tex = TRUE)
 
+effect_summary_table.df[effect_summary_table.df$nutrient == "Phosp.",][c("effect_description", "min_personal", "max_personal")]
+
+
 ```
 
 #dialysis_lp_plots
+
+```{r}
+# Function to remove nearly identical points
+library(dplyr)
+
+# Function to remove overlapping points with proportional tolerance
+remove_overlapping_points <- function(data, x_col, y_col, tolerance_ratio = 0.01) {
+  # Ensure x_col and y_col are interpreted as column names
+  x_col <- rlang::ensym(x_col)
+  y_col <- rlang::ensym(y_col)
+  
+  # Calculate tolerances based on the range of x and y
+  x_range <- diff(range(data[[rlang::as_string(x_col)]]))
+  y_range <- diff(range(data[[rlang::as_string(y_col)]]))
+  
+  tolerance_x <- x_range * tolerance_ratio
+  tolerance_y <- y_range * tolerance_ratio
+  
+  # Perform the deduplication
+  data %>%
+    mutate(
+      x_rounded = round(!!x_col / tolerance_x),
+      y_rounded = round(!!y_col / tolerance_y)
+    ) %>%
+    group_by(x_rounded, y_rounded) %>%
+    slice(1) %>%  # Keep the first point in each group
+    ungroup() %>%
+    select(-x_rounded, -y_rounded)  # Remove helper columns
+}
+
+```
 
 ```{r dialysis_lp_plots-function}
 
@@ -870,7 +913,9 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
   palb_scale_min <- min(34, concinfo.df$current_palb[1:persons])-0.5
   palb_scale_max <- max(45, concinfo.df$current_palb[1:persons])+0.5
   
-  point_size <- 0.5
+  point_size <- 0.8
+  
+  subsampling_tolerance <- 0.04
   
   gradient_colors <- colorspace::heat_hcl(3)
   plot_index <- 1
@@ -879,10 +924,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
     
       graph_person_id <- match(subject_code, levels(dialysis$potilas))
       
+      print(graph_person_id)
+      
       accepted_intake.df <- readRDS(paste0("patient_summary/dialysis/mv3_cross_two_levels/simulationX50_B50_A50_I50/details/accepted_intake_",graph_person_id,".rds"))
       
-      print(graph_person_id)
-  
       # Get personal normal ranges 
     
       personal_info <- head(dialysis[dialysis$potilas == subject_code,],1)
@@ -901,8 +946,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
       pred_pk <- concinfo.df[concinfo.df$subject_code == subject_code,]$pk
       pred_fppi <- concinfo.df[concinfo.df$subject_code == subject_code,]$fppi
       pred_palb <- concinfo.df[concinfo.df$subject_code == subject_code,]$palb
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, pk, lp, subsampling_tolerance)
       
-      conc_plot1 <- ggplot(accepted_intake.df) +
+      conc_plot1 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=pk, color=preference), size = point_size, show.legend = FALSE) +
         geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.2) +
         geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
@@ -915,8 +962,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
         scale_color_gradientn(colours = gradient_colors) +
         theme(panel.grid.minor = element_blank()) +
         labs(x = element_blank(), y = paste0(subject_code, " ", "\nlog-prob."))
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fppi, lp, subsampling_tolerance)
   
-      conc_plot2 <- ggplot(accepted_intake.df) +
+      conc_plot2 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fppi, color=preference), size = point_size, show.legend = FALSE) +
         geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
         geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
@@ -928,8 +977,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
         theme_bw() +
         theme(panel.grid.minor = element_blank()) +
         labs(x = element_blank(), y = element_blank())
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, palb, lp, subsampling_tolerance)
       
-      conc_plot3 <- ggplot(accepted_intake.df) +
+      conc_plot3 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=palb, color=preference), size = point_size, show.legend = FALSE) +
         geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
         geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +
@@ -961,8 +1012,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
   pk_recommendations <- c(recommeded_concentrations$lower_limits[1], recommeded_concentrations$upper_limits[1])
   fppi_recommendations <- c(recommeded_concentrations$lower_limits[2], recommeded_concentrations$upper_limits[2])
   palb_recommendations <- c(recommeded_concentrations$lower_limits[3], recommeded_concentrations$upper_limits[3])
+
+  subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, pk, lp, subsampling_tolerance)
       
-  conc_plot1 <- ggplot(accepted_intake.df) +
+  conc_plot1 <- ggplot(subsampled_intake.df) +
     geom_point(aes(y=lp, x=pk, color=preference), size = point_size, show.legend = FALSE) +
     geom_vline(xintercept = pk_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
     geom_vline(xintercept = pred_pk, linetype="solid", color = "black", linewidth=0.3) +
@@ -975,7 +1028,9 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
     theme(panel.grid.minor = element_blank()) +
     labs(x = "P-K (mmol/l)", y = paste0(subject_code, " ", "\nlog-prob."))
 
-  conc_plot2 <- ggplot(accepted_intake.df) +
+  subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fppi, lp, subsampling_tolerance)
+
+  conc_plot2 <- ggplot(subsampled_intake.df) +
     geom_point(aes(y=lp, x=fppi, color=preference), size = point_size, show.legend = FALSE) +
     geom_vline(xintercept = fppi_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
     geom_vline(xintercept = pred_fppi, linetype="solid", color = "black", linewidth=0.3) +
@@ -987,8 +1042,10 @@ dialysis_lp_plots <- function(subject_code_vector, plot_path) {
     theme_bw() +
     theme(panel.grid.minor = element_blank()) +
     labs(x = "fP-Pi (mmol/l)", y = element_blank())
-  
-  conc_plot3 <- ggplot(accepted_intake.df) +
+
+  subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, palb, lp, subsampling_tolerance)
+    
+  conc_plot3 <- ggplot(subsampled_intake.df) +
     geom_point(aes(y=lp, x=palb, color=preference), size = point_size, show.legend = FALSE) +
     geom_vline(xintercept = palb_recommendations, linetype="solid", color = "darkgrey", linewidth=0.4) +
     geom_vline(xintercept = pred_palb, linetype="solid", color = "black", linewidth=0.3) +

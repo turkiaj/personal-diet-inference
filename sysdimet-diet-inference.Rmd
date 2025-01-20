@@ -77,6 +77,36 @@ sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,]
 
 ```
 
+```{r}
+
+library(ggplot2)
+
+# linoleeniepros	linoleeni	Alpha-linolenic acid
+# beta = -7.94
+
+org_mean <- mean(sysdimet$linoleeniepros)
+org_sd <- sd(sysdimet$linoleeniepros)
+
+ggplot(sysdimet, aes((linoleeniepros-org_mean)/org_sd, fsins, group=SUBJECT_ID, color=SUBJECT_ID)) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth(method = lm, se = FALSE, linewidth=0.5, show.legend = FALSE)
+
+```
+
+```{r}
+
+# linoliepros	linoliepros	Linoleic acid
+# beta = 7.52
+
+org_mean <- mean(sysdimet$linoliepros)
+org_sd <- sd(sysdimet$linoliepros)
+
+ggplot(sysdimet, aes((linoliepros-org_mean)/org_sd, fsins, group=SUBJECT_ID, color=SUBJECT_ID)) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth(method = lm, se = FALSE, linewidth=0.5, show.legend = FALSE)
+
+  #  geom_smooth(method = lm)
+```
 
 ```{r}
 
@@ -190,6 +220,16 @@ c(min(eff),mean(eff),max(eff)) # 250.231  4726.991 13476.071
 
 rhat <- na.omit(sumstats$summary[,10])
 c(min(rhat),mean(rhat),max(rhat)) # 0.9990149 1.0000900 1.0125630
+
+pe <- rstan::summary(target_blmm, pars="personal_effect")
+pe
+
+beta <- rstan::summary(target_blmm, pars="beta")
+
+beta
+
+pe$summary
+sysdimet_predictors
 
 ```
 
@@ -765,7 +805,7 @@ effect_summary <- personal_effects %>%
 
 #effect_summary[effect_summary$effect=="cvit_fsins",]
 
-#effect_summary
+effect_summary
 ```
 
 
@@ -787,7 +827,7 @@ effect_summary <- personal_effects %>%
                 max_personal_uCI = as.numeric(value_uCI[which.max(as.numeric(value))]),
                 total_personal = abs(min_personal) + abs(max_personal)
   ) %>%
-  arrange(desc(total_personal)) %>% top_n(20)
+  arrange(desc(total_personal)) %>% top_n(100)
 
 effect_summary_table.df <- data.frame(effect <- effect_summary$effect, row.names = NULL)
 
@@ -820,7 +860,41 @@ kable(effect_summary_table.df[c(6,2:5)], "latex", escape = F, booktabs = T, row.
 
 #effect_summary_table.df[effect_summary_table.df$nutrient == "Sucrose",]
 
+effect_summary_table.df[effect_summary_table.df$nutrient == "EPS-fatty acid",][c("effect_description", "min_personal", "max_personal")]
+
 ```
+
+```{r}
+# Function to remove nearly identical points
+library(dplyr)
+
+# Function to remove overlapping points with proportional tolerance
+remove_overlapping_points <- function(data, x_col, y_col, tolerance_ratio = 0.01) {
+  # Ensure x_col and y_col are interpreted as column names
+  x_col <- rlang::ensym(x_col)
+  y_col <- rlang::ensym(y_col)
+  
+  # Calculate tolerances based on the range of x and y
+  x_range <- diff(range(data[[rlang::as_string(x_col)]]))
+  y_range <- diff(range(data[[rlang::as_string(y_col)]]))
+  
+  tolerance_x <- x_range * tolerance_ratio
+  tolerance_y <- y_range * tolerance_ratio
+  
+  # Perform the deduplication
+  data %>%
+    mutate(
+      x_rounded = round(!!x_col / tolerance_x),
+      y_rounded = round(!!y_col / tolerance_y)
+    ) %>%
+    group_by(x_rounded, y_rounded) %>%
+    slice(1) %>%  # Keep the first point in each group
+    ungroup() %>%
+    select(-x_rounded, -y_rounded)  # Remove helper columns
+}
+
+```
+
 
 #sysdimet_lp_plots
 ```{r sysdimet_lp_plots-function}
@@ -848,7 +922,7 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
   fpgluk_scale_min <- min(4.0, concinfo.df$current_fpgluk[1:persons])-0.1
   fpgluk_scale_max <- max(6.0, concinfo.df$current_fpgluk[1:persons])+0.1
   
-  point_size <- 0.5
+  point_size <- 0.8
   
   #normal_palette <- c("#00337C", "#AADDFF", "#DDFFFF", "#03C988")
   #failed_palette <- c("#00337C", "#DDDDDD", "#FFDDDD", "#FF6961")
@@ -860,6 +934,8 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
   gradient_colors <- colorspace::heat_hcl(3)
   plot_index <- 1
+  
+  subsampling_tolerance <- 0.05
   
   for (subject_code in subject_code_vector[1:(persons-1)]) {
     
@@ -901,7 +977,9 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         
         lp_midpoint <- mean(accepted_intake.df$lp)
         
-        conc_plot1 <- ggplot(accepted_intake.df) +
+        subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fshdl, lp, subsampling_tolerance)
+        
+        conc_plot1 <- ggplot(subsampled_intake.df) +
           geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
           #geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
           geom_vline(xintercept = pred_fshdl, linetype="solid", color = "black", linewidth=0.3) +
@@ -917,8 +995,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
           #theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
           #labs(x = element_blank(), y = subject_code) +
           labs(x = element_blank(), y = paste0(subject_code, " ", "\nlog-prob."))
+
+        subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fsldl, lp, subsampling_tolerance)
   
-        conc_plot2 <- ggplot(accepted_intake.df) +
+        conc_plot2 <- ggplot(subsampled_intake.df) +
           geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
           #geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
           geom_vline(xintercept = pred_fsldl, linetype="solid", color = "black", linewidth=0.3) +
@@ -932,8 +1012,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
           theme(panel.grid.minor = element_blank()) +
           theme(axis.text.y = element_blank()) +
           labs(x = element_blank(), y = element_blank())
+
+        subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fsins, lp, subsampling_tolerance)
     
-        conc_plot3 <- ggplot(accepted_intake.df) +
+        conc_plot3 <- ggplot(subsampled_intake.df) +
           geom_point(aes(y=lp, x=fsins, color=preference), size = point_size, show.legend = FALSE) +
           #geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
           geom_vline(xintercept = pred_fsins, linetype="solid", color = "black", linewidth=0.3) +
@@ -948,8 +1030,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
           theme(panel.grid.minor = element_blank()) +
           theme(axis.text.y = element_blank()) +
           labs(x = element_blank(), y = element_blank())
+
+        subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fskol, lp, subsampling_tolerance)
     
-        conc_plot4 <- ggplot(accepted_intake.df) +
+        conc_plot4 <- ggplot(subsampled_intake.df) +
           geom_point(aes(y=lp, x=fskol, color=preference), size = point_size, show.legend = FALSE) +
           #geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
           geom_vline(xintercept = pred_fskol, linetype="solid", color = "black", linewidth=0.3) +
@@ -963,8 +1047,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
           theme(panel.grid.minor = element_blank()) +
           theme(axis.text.y = element_blank()) +
           labs(x = element_blank(), y = element_blank())
+
+        subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fpgluk, lp, subsampling_tolerance)
     
-        conc_plot5 <- ggplot(accepted_intake.df) +
+        conc_plot5 <- ggplot(subsampled_intake.df) +
           geom_point(aes(y=lp, x=fpgluk, color=preference), size = point_size, show.legend = FALSE) +
           #geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
           geom_vline(xintercept = pred_fpgluk, linetype="solid", color = "black", linewidth=0.3) +
@@ -1021,8 +1107,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
       pred_fpgluk <- concinfo.df[concinfo.df$subject_code == subject_code,]$fpgluk
     
       lp_midpoint <- mean(accepted_intake.df$lp) * 0.50
+      
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fshdl, lp, subsampling_tolerance)
     
-      conc_plot1 <- ggplot(accepted_intake.df) +
+      conc_plot1 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fshdl, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fshdl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
         geom_vline(xintercept = pred_fshdl, linetype="solid", color = "black", linewidth=0.3) +
@@ -1035,8 +1123,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         theme_bw() +
         theme(panel.grid.minor = element_blank()) +
         labs(x = "fS-HDL (mmol/l)", y = paste0(subject_code, " ", "\nlog-prob."))
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fsldl, lp, subsampling_tolerance)
       
-      conc_plot2 <- ggplot(accepted_intake.df) +
+      conc_plot2 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fsldl, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fsldl_recommendations, linetype="solid", color = "black", linewidth=0.2) +
         geom_vline(xintercept = pred_fsldl, linetype="solid", color = "black", linewidth=0.3) +
@@ -1050,8 +1140,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         theme(panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank()) +
         labs(x = "fS-LDL (mmol/l)", y = element_blank())
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fsins, lp, subsampling_tolerance)
       
-      conc_plot3 <- ggplot(accepted_intake.df) +
+      conc_plot3 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fsins, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fsins_recommendations, linetype="solid", color = "black", linewidth=0.4) +
         geom_vline(xintercept = pred_fsins, linetype="solid", color = "black", linewidth=0.3) +
@@ -1065,8 +1157,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         theme(panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank()) +
         labs(x = "fS-Ins (mmol/l)", y = element_blank())
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fskol, lp, subsampling_tolerance)
       
-      conc_plot4 <- ggplot(accepted_intake.df) +
+      conc_plot4 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fskol, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fskol_recommendations, linetype="solid", color = "black", linewidth=0.4) +
         geom_vline(xintercept = pred_fskol, linetype="solid", color = "black", linewidth=0.3) +
@@ -1080,8 +1174,10 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
         theme(panel.grid.minor = element_blank()) +
         theme(axis.text.y = element_blank()) +
         labs(x = "fS-Chol (mmol/l)", y = element_blank())
+
+      subsampled_intake.df <- remove_overlapping_points(accepted_intake.df, fpgluk, lp, subsampling_tolerance)
       
-      conc_plot5 <- ggplot(accepted_intake.df) +
+      conc_plot5 <- ggplot(subsampled_intake.df) +
         geom_point(aes(y=lp, x=fpgluk, color=preference), size = point_size, show.legend = FALSE) +
         #geom_vline(xintercept = fpgluk_recommendations, linetype="solid", color = "black", linewidth=0.4) +
         geom_vline(xintercept = pred_fpgluk, linetype="solid", color = "black", linewidth=0.3) +
@@ -1112,8 +1208,16 @@ sysdimet_lp_plots <- function(subject_code_vector, plot_path) {
 
 #sysdimet_lp_article_plot
 
-```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=10, fig.keep='last'}
+```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=6, fig.keep='last'}
 
+subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
+
+sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
+
+```
+
+
+```{r sysdimet_lp_article_plot, cache=FALSE, eval=TRUE, echo=FALSE,message=FALSE, warning=FALSE, fig.width=7, fig.height=10, fig.keep='last'}
 # Only patients with non-optimal concentrations are included in the recommendation
 
 subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
