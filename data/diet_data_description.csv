@@ -33,7 +33,7 @@ pferrit;Ferritiini;Ferritin;Ferritin;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 fptransf;fP-Transf;fP-Transf;fP-Transf;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 crp;CRP;CRP;CRP;;0;;;;;;Gaussian;0;FALSE;FALSE;0
 pna;P-Na;P-Na;P-Na;10;0;;;;;0;Gaussian;0;FALSE;FALSE;0
-sakkaroosi;Sakkaroosi;Sucrose;Sucrose;g/d;0;0;10;2;0;10;Gaussian;1;TRUE;TRUE;0
+sakkaroosi;Sakkaroosi;Sucrose;Sucrose;g/d;0;0;10;8;0;10;Gaussian;1;TRUE;TRUE;0
 sakkaroosiepros;Sakkaroosi;Sucrose;Sucrose;E%;100;0;10;2;0;10;Gaussian;1;TRUE;TRUE;113
 protepros;Proteiini E%;Protein;Protein;E%;100;10,0;20,0;15,0;0,0;40,0;Gaussian;1;TRUE;TRUE;100
 pkrea;P-Krea;P-Krea;P-Krea;;0;;;;;;Gaussian;0;FALSE;FALSE;0
@@ -68,11 +68,11 @@ mufa;Mufa;Monounsaturated Fatty Acids;MUFA;g/d;0;0;500;;;;Gaussian;1;FALSE;FALSE
 kuitu;Kuitu, kokonais;Fiber;Fiber;g/d;100;20,0;55,0;30,0;0,0;50,0;Gaussian;1;TRUE;TRUE;105
 pufa;Pufa;Polyunsaturated Fatty Acids;PUFA;g/d;0;0;500;;;;Gaussian;1;FALSE;FALSE;0
 dvit;D-vit.;Vitamin D;Vit. D;ug/d;100;7,5;100,0;10,0;0,0;100,0;Gaussian;1;TRUE;TRUE;106
-kalsium;Ca;Calcium;Calcium;mg/d;100;400,0;2500,0;800,0;0,0;3000,0;Gaussian;0;TRUE;FALSE;108
-kalium;Kalium;Potassium;Potass.;mg/d;100;1600,0;3700,0;3100,0;0,0;3000,0;Gaussian;0;TRUE;FALSE;109
+kalsium;Ca;Calcium;Calcium;mg/d;100;400,0;2500,0;950,0;0,0;3000,0;Gaussian;0;TRUE;FALSE;108
+kalium;Kalium;Potassium;Potass.;mg/d;100;1600,0;3700,0;3500,0;0,0;3000,0;Gaussian;0;TRUE;FALSE;109
 suola;Suola;Salt;Salt;mg/d;100;1500;5750,0;3750,0;0,0;6000,0;Gaussian;0;TRUE;FALSE;110
 natrium;Natrium;Sodium;Sodium;g/d;100;45113,0;45119,0;45087,0;0,0;20,0;Gaussian;0;FALSE;FALSE;107
-fosfori;Fosfori;Phosphorous;Phosp.;mg/d;100;300,0;3000,0;600,0;0,0;6000,0;Gaussian;0;TRUE;FALSE;111
+fosfori;Fosfori;Phosphorous;Phosp.;mg/d;100;300,0;3000,0;520,0;0,0;6000,0;Gaussian;0;TRUE;FALSE;111
 vesi;Vesi;Water;Water;ml/d;100;500,0;2500,0;1500,0;0,0;7000,0;Gaussian;0;TRUE;FALSE;112
 pk;P-K;P-K;P-K;mmol/l;200;;;;0;10;Gaussian;0;TRUE;FALSE;0
 fppi;fP-Pi;fP-Pi;fP-Pi;mmol/l;200;;;;0;10;Gaussian;0;TRUE;FALSE;0
@@ -90,7 +90,7 @@ kol;Kolestroli;Cholesterol;Chol.;mg/d;100;0,0;300,0;;;;Gaussian;0;FALSE;TRUE;107
 sellul;Selluloosa;Cellulose;Cellulose;;100;;;;;;Gaussian;1;FALSE;FALSE;111
 ligniini;Ligniini;Lignin;Lignin;;100;;;;;;Gaussian;1;FALSE;FALSE;112
 alkoholi;Alkoholi;Alcohol;Insulin;;100;;;;;;Gaussian;1;FALSE;FALSE;113
-foolih;Foolihappo;Folic acid;Folic acid;ug/d;100;100;1000;300;;;Gaussian;0;FALSE;TRUE;115
+foolih;Foolihappo;Folate;Folate;ug/d;100;100;1000;330;;;Gaussian;0;FALSE;TRUE;115
 cvit;C-vit.;Vitamin C;Vit. C;mg/d;100;75;1000;100;;;Gaussian;0;FALSE;TRUE;116
 epa;EPA-rasvahappo;EPA-fatty acid;EPA-fatty acid;mg/d;100;0;2,5;;;;Gaussian;1;FALSE;TRUE;117
 dha;DHA-rasvahappo;DHA-fatty acid;DHA-fatty acid;mg/d;100;0;2,5;;;;Gaussian;1;FALSE;TRUE;118

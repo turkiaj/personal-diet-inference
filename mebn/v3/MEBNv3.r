@@ -16,6 +16,64 @@ mebn.get_mode <- function(v) {
 
 mebn.get_personal_sysdimet_guidelines <- function(personal_info)
 {
+  # fshdl:
+  # fP-HDL
+  
+  # https://diagnostiikka.hus.fi/tutkimus?id=4516
+  # 18 v täyttäneillä käytetään kuitenkin Lääkäriseura Duodecimin ja Suomen Sisätautilääkärien Yhdistys ry:n Käypä hoito -suosituksen 
+  # Dyslipidemiat (2013) mukaisia tavoitearvoja, jotka ovat: miehet yli 1.0 mmol/l ja naiset yli 1.2 mmol/l.
+  # Ylärajat NORIP-mukaiset. 
+  
+  # gender: female = 1, male = 0
+  if (personal_info[["sukupuoli"]] == 1)
+  {
+    lower_limits <- c(1.2)
+    upper_limits <- c(2.5)
+  } else {
+    lower_limits <- c(1.0)
+    upper_limits <- c(2.5)
+  }
+  
+  # fsldl:
+  # fP-LDL   
+  # https://diagnostiikka.hus.fi/tutkimus?id=4599
+  
+  lower_limits <- cbind(lower_limits, 0.0)
+  
+  # Pitäisi päästä 3.0:aan
+  upper_limits <- cbind(upper_limits, 3.50)
+  
+  # fsins:
+  # S-Insu      2.0 - 20 mU/l, kaikki
+
+  lower_limits <- cbind(lower_limits, 2.0)
+  upper_limits <- cbind(upper_limits, 25)
+  
+  # fskol:
+  
+  # Ylärajatavoite Käypä hoito-suosituksen mukaan https://diagnostiikka.hus.fi/tutkimus?id=4515
+  # fP-Kol (mmol/l)
+
+  lower_limits <- cbind(lower_limits, 1.0)
+  upper_limits <- cbind(upper_limits, 5.5)
+  
+  # fpgluk:
+  # fP-Gluk
+  #   4 - 6 mmol/l, kaikki
+
+  lower_limits <- cbind(lower_limits, 4)
+  upper_limits <- cbind(upper_limits, 6)
+  
+  personal_limits <- within(list(), {
+    lower_limits <- lower_limits
+    upper_limits <- upper_limits
+  })
+  
+  return(personal_limits)
+}
+
+mebn.get_personal_sysdimet_guidelines_norip <- function(personal_info)
+{
   # Yhteispohjoismaisen viitearvoprojektin (NORIP) mukaan aikuisten viitearvot ovat:  
   # https://pubmed.ncbi.nlm.nih.gov/15223705/
   
@@ -55,7 +113,7 @@ mebn.get_personal_sysdimet_guidelines <- function(personal_info)
   
   # fsins:
   # S-Insu      2.6 - 25 mU/l, kaikki
-
+  
   lower_limits <- cbind(lower_limits, 2.6)
   upper_limits <- cbind(upper_limits, 25)
   
@@ -64,7 +122,7 @@ mebn.get_personal_sysdimet_guidelines <- function(personal_info)
   #   18-29v  2.9 - 6.1 
   #   30-49v  3.3 - 6.9 
   #   yli 50v 3.9 - 7.8
-
+  
   if (personal_info[["ika"]] < 30)
   {
     lower_limits <- cbind(lower_limits, 2.9)
@@ -80,8 +138,10 @@ mebn.get_personal_sysdimet_guidelines <- function(personal_info)
   
   # fpgluk:
   # fP-Gluk
+  
+  # Tämä on Käypä hoito-suosituksen mukainen
   #   4 - 6 mmol/l, kaikki
-
+  
   lower_limits <- cbind(lower_limits, 4)
   upper_limits <- cbind(upper_limits, 6)
   
@@ -385,7 +445,6 @@ mebn.renormalize <- function(x, org_min, org_max) { return ((x + org_min) * (org
 
 mebn.standardize <- function(x, org_mean, org_sd) 
 { 
-  n_scaled <- (x - org_mean) / org_sd
   #n_scaled <- x / org_sd
   return(n_scaled)
 }

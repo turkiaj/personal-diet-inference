@@ -77,36 +77,6 @@ sysdimet_targets <- sysdimet_datadesc[sysdimet_datadesc$Order==200,]
 
 ```
 
-```{r}
-
-library(ggplot2)
-
-# linoleeniepros	linoleeni	Alpha-linolenic acid
-# beta = -7.94
-
-org_mean <- mean(sysdimet$linoleeniepros)
-org_sd <- sd(sysdimet$linoleeniepros)
-
-ggplot(sysdimet, aes((linoleeniepros-org_mean)/org_sd, fsins, group=SUBJECT_ID, color=SUBJECT_ID)) +
-  geom_point(show.legend = FALSE) +
-  geom_smooth(method = lm, se = FALSE, linewidth=0.5, show.legend = FALSE)
-
-```
-
-```{r}
-
-# linoliepros	linoliepros	Linoleic acid
-# beta = 7.52
-
-org_mean <- mean(sysdimet$linoliepros)
-org_sd <- sd(sysdimet$linoliepros)
-
-ggplot(sysdimet, aes((linoliepros-org_mean)/org_sd, fsins, group=SUBJECT_ID, color=SUBJECT_ID)) +
-  geom_point(show.legend = FALSE) +
-  geom_smooth(method = lm, se = FALSE, linewidth=0.5, show.legend = FALSE)
-
-  #  geom_smooth(method = lm)
-```
 
 ```{r}
 
@@ -116,15 +86,15 @@ mean(sysdimet[sysdimet$sukupuoli == 1,]$fshdl) # female
 sd(sysdimet[sysdimet$sukupuoli == 0,]$fshdl) # male
 sd(sysdimet[sysdimet$sukupuoli == 1,]$fshdl) # female
 
-mean(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fsldl)
-sd(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fsldl)
+mean(sysdimet$fsldl)
+sd(sysdimet$fsldl)
 
 mean(sysdimet[sysdimet$ika >= 50,]$fsldl)
 sd(sysdimet[sysdimet$ika >= 50,]$fsldl)
 
 
-mean(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fskol)
-sd(sysdimet[sysdimet$ika >= 30 & sysdimet$ika <= 49,]$fskol)
+mean(sysdimet$fskol)
+sd(sysdimet$fskol)
 
 mean(sysdimet[sysdimet$ika >= 50,]$fskol)
 sd(sysdimet[sysdimet$ika >= 50,]$fskol)
@@ -476,18 +446,29 @@ for (person_id in 1:length(kontrolli)) {
 
       # Sample diet proposals and matching concentration predictions
       
-      l3 <- 40
-      l5 <- 2
+      l1 <- 8
+      l3 <- 35
+      l5 <- 2.0
+  
+      # now failing
+      # 121,12,108,40
+      #if (graph_person_id == 121 || graph_person_id == 12 || graph_person_id == 108 || graph_person_id == 40)
+      #{
+      #   l1 <- 6
+      #   l3 <- 10
+      #   l5 <- 1
+      #}
+
+      if (graph_person_id == 5)
+      {
+        l1 <- 4 
+      }
       
       # - more loose preference for special cases
-      if (graph_person_id == 12 || graph_person_id == 84)
+      if (graph_person_id == 127 || graph_person_id == 40 || graph_person_id == 12 || graph_person_id == 121 || graph_person_id == 5)
       {
-        l3 <- 35
-        l5 <- 1.5
-      } else if (graph_person_id == 26 || graph_person_id == 28)
-      {
-        l3 <- 30
-        l5 <- 1.1
+         l3 <- 7
+         l5 <- 1.0
       }
       
       intake_model <- mebn.Query(reaction_graph = personal_graph,
@@ -506,7 +487,7 @@ for (person_id in 1:length(kontrolli)) {
                                posterior_samples = 500,
                                repeat_only = 0,
                                verbose = 1,
-                               l1 = 8,      # limit_steepness: Steepness parameter for individual soft bounds
+                               l1 = l1,     # limit_steepness: Steepness parameter for individual soft bounds
                                l2 = 15,     # limit_requirement: Requirement for meeting all bounds
                                l3 = l3,     # preference_strength: Weighting for preference in the model
                                l4 = 30,     # transition_steepness: Steepness for the transition between model components
@@ -1222,7 +1203,6 @@ sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdim
 
 subjects_with_failed_concs <- readRDS(paste0("patient_summary/sysdimet/gamma_qr_mv/simulation",simulation,"/recommendation_summary_with_concpreds_and_current.rds"))
 
-#sysdimet_lp_plots(subjects_with_failed_concs[1:5,]$subject_code, "figures/sysdimet_fixed_concentrations.pdf")
 sysdimet_lp_plots(subjects_with_failed_concs[6:16,]$subject_code, "figures/sysdimet_fixed_concentrations_rest.pdf")
 ```
 
